@@ -13,11 +13,11 @@ try
     global AUTHOR = ENV["AUTHOR"]
 end
 
-checkhome(path::String) = ismatch(r"^~/",path) ? joinpath(homedir(),path[3:end]) : path
+checkhome(path::String) = contains(path,r"^~/") ? joinpath(homedir(),path[3:end]) : path
 
 function relhome(path::String,home::String=homedir())
-    reg = Regex("(?<=^$(replace(home,'/',"\\/")))\\/?\\X+")
-    return ismatch(reg,path) ? '~'*match(reg,path).match : path
+    reg = Regex("(?<=^$(replace(home,'/'=>"\\/")))\\/?\\X+")
+    return contains(path,reg) ? '~'*match(reg,path).match : path
 end
 
 function preamble(path::String=joinpath(Pkg.dir("JuliaTeX"),"vtx/default.tex"))
@@ -58,7 +58,6 @@ function tex2dict(tex::String,data=nothing)
     texs = split(split(tex,"\n\\end{document}")[1],"\n\\begin{document}\n")
     pre = String(texs[1])
     doc = String(texs[2])
-    println(pre)
     author = texlocate(:author,pre,"unknown")
     date = texlocate(:date,pre,"unknown")
     title = texlocate(:title,pre,"unknown")
@@ -66,8 +65,8 @@ function tex2dict(tex::String,data=nothing)
     pre = textagdel(:date,pre)
     pre = textagdel(:title,pre)
     prereg = "%vtx:"*regtextag*"\n?"
-    ismatch(Regex(prereg),pre) && (pre = match(Regex("(?:"*prereg*")\\X+"),pre).match)
-    pre = replace(pre,r"\n+$","")
+    contains(pre,Regex(prereg)) && (pre = match(Regex("(?:"*prereg*")\\X+"),pre).match)
+    pre = replace(pre,r"\n+$"=>"")
     out = data
     if out == nothing
         out = Dict(
@@ -100,9 +99,9 @@ function dict2tex(data::Dict)
     date = tomlocate("date",data,"unknown")
     title = tomlocate("title",data,"unknown")
     reg = "^%vtx:"*regtextag
-    if ismatch(Regex(reg*"\n?"),pre)
+    if contains(pre,Regex(reg*"\n?"))
         file = match(Regex("(?<=%vtx:)"*regtextag*"(?<=\n)?"),pre).match
-        pre = preamble(join(file))*replace(pre,Regex(reg),"")
+        pre = preamble(join(file))*replace(pre,Regex(reg)=>"")
     end
     tex = pre*"\n"
     author ≠ "unknown" && (tex *= "\n\\author{$author}")
