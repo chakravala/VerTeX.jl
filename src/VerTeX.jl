@@ -1,3 +1,4 @@
+__precompile__()
 module VerTeX
 
 #   This file is part of VerTeX.jl. It is licensed under the MIT license
@@ -112,5 +113,19 @@ end
 
 toml2tex(toml::String) = dict2tex(TOML.parse(toml))
 tex2toml(tex::String) = dict2toml(tex2dict(tex))
+
+include("depot.jl")
+
+function __init__()
+    try
+        repodat = Dict()
+        open(joinpath(homedir(),".julia/vtx-depot.toml"), "r") do f
+            repodat = TOML.parse(read(f,String))
+        end
+        for key in keys(repodat)
+            push!(repos,key=>repodat[key])
+        end
+    end
+end
 
 end # module
