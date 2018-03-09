@@ -6,7 +6,7 @@ module VerTeX
 
 export dict2toml, tex2dict, tex2toml, dict2tex, toml2tex, toml2dict
 
-using Pkg3.TOML, UUIDs, Dates
+using Pkg3.TOML, Pkg3.Pkg2, UUIDs, Dates
 
 AUTHOR = "anonymous"
 try
@@ -20,7 +20,7 @@ function relhome(path::String,home::String=homedir())
     return contains(path,reg) ? '~'*match(reg,path).match : path
 end
 
-function preamble(path::String=joinpath(Pkg.dir("JuliaTeX"),"vtx/default.tex"))
+function preamble(path::String=joinpath(Pkg2.dir("VerTeX"),"vtx/default.tex"))
     load = ""
     open(checkhome(path), "r") do f
         load = read(f,String)
@@ -47,28 +47,26 @@ function textagdel(tag::Symbol,tex::String)
 end
 
 function texlocate(tag::Symbol,tex::String,neg::String="none")
-    out = match(Regex("(?<=\\\\$tag{)"*regtextag*"(?=})"),tex)
-    return typeof(out) == Nothing ? neg : out.match
+    out = collect((m.match for m = eachmatch(Regex("(?<=\\\\$tag{)"*regtextag*"(?=})"), tex)))
+    return isempty(out) ? [neg] : join.(out)
 end
 
 tomlocate(tag::String,data::Dict,neg::String="none") = haskey(data,tag) ? data[tag] : neg
 
 function tex2dict(tex::String,data=nothing)
     tim = Dates.unix2datetime(time())
-    texs = split(split(tex,"\n\\end{document}")[1],"\n\\begin{document}\n")
-    pre = String(texs[1])
-    doc = String(texs[2])
-    author = texlocate(:author,pre,"unknown")
-    date = texlocate(:date,pre,"unknown")
-    title = texlocate(:title,pre,"unknown")
-    pre = textagdel(:author,pre)
-    pre = textagdel(:date,pre)
-    pre = textagdel(:title,pre)
+    (pre,doc) = String.(split(split(tex,"\n\\end{document}")[1],"\n\\begin{document}\n"))
+    author = texlocate(:author,pre,"unknown")[1]
+    date = texlocate(:date,pre,"unknown")[1]
+    title = texlocate(:title,pre,"unknown")[1]
+    for item ∈ [:author,:date,:title]
+        pre = textagdel(item,pre)
+    end
     prereg = "%vtx:"*regtextag*"\n?"
     contains(pre,Regex(prereg)) && (pre = match(Regex("(?:"*prereg*")\\X+"),pre).match)
     pre = replace(pre,r"\n+$"=>"")
-    out = data
-    if out == nothing
+    out = deepcopy(data)
+    if data == nothing
         out = Dict(
             "editor" => AUTHOR,
             "author" => author,
@@ -79,7 +77,8 @@ function tex2dict(tex::String,data=nothing)
             "created" => "$tim",
             "revised" => "$tim",
             "uuid" => "$(UUIDs.uuid1())",
-            "version" => ["VerTeX", "v\"0.1.0\""])
+            "version" => ["VerTeX", "v\"0.1.0\""],
+            "ids" => Dict())
     else
         out["editor"] = AUTHOR
         out["author"] = author
@@ -89,7 +88,82 @@ function tex2dict(tex::String,data=nothing)
         out["title"] = title
         out["revised"] = "$tim"
     end
+    items = ["ref","cite","label","deps"] # "refby", "citeby", "depsby"
+    for item ∈ items
+        temp = texlocate(Symbol(item),doc)
+        if temp ≠ ["none"]
+            haskey(out,item) ? (out[item] = temp) : push!(out,item=>temp)
+        else
+            haskey(out,item) && pop!(out,item)
+        end
+    end
+    for cat ∈ ["ref","deps"]
+        haskey(out,cat) && for ref in out[cat]
+            if haskey(out["ids"],ref)
+                !checkuuid(out["ids"][ref]...,ref) && updateref!(out,ref)
+            else
+                updateref!(out,ref)
+            end
+        end
+    end
+    haskey(out,"label") && for lbl in out["label"]
+        for cat ∈ [:ref,:deps]
+            result = searchvtx([cat],[lbl])
+            for v ∈ result
+                updaterefby!(out,v;cat="$(cat)by")
+            end
+        end
+    end
+    for cat ∈ ["refby","depsby"]
+        haskey(out,cat) && isempty(out[cat]) && pop!(out,cat)
+    end
+    for key in keys(out["ids"])
+        found = false
+        for item ∈ ["cite","deps","ref"]
+            haskey(out,item) && (key ∈ out[item]) && (found = true)
+        end
+        (key == out["author"]) && (found = true)
+        !found && pop!(out["ids"],key)
+    end
     return out::Dict
+end
+
+function checkuuid(uuid::String,depot::String,dir::String,label::String)
+    repodat = getdepot()
+    !haskey(repodat,depot) && (return false)
+    !isfile(joinpath(checkhome(repodat[depot]),dir)) && (return false)
+    dat = load(dir,depot)
+    uuid ≠ dat["uuid"] && (return false)
+    return haskey(dat,"label") && (label in dat["label"])
+end
+
+function updateref!(out,ref,cat::Symbol=:label)
+    result = searchvtx([cat],[ref])
+    length(result) ≠ 1 && (@warn "could not find label $ref"; return out)
+    give = ref => [result[1]["uuid"],result[1]["depot"],result[1]["dir"]]
+    haskey(out["ids"],ref) ? (out["ids"][ref] = give) : push!(out["ids"],give)
+    return out
+end
+
+function updaterefby!(out,v;remove=false,cat::String="refby")
+    n = [v["uuid"],v["depot"],v["dir"]]
+    if haskey(out,cat)
+        amt = length(out[cat])
+        k = 1
+        while k ≤ amt
+            if out[cat][k][1] == v["uuid"]
+                deleteat!(out[cat],k)
+                amt -= 1
+            else
+                k += 1
+            end
+        end
+        !remove && push!(out[cat],n)
+        isempty(out[cat]) && pop!(out,cat)
+    else
+        !remove && push!(out,"refby"=>[n])
+    end
+    
 end
 
 function dict2tex(data::Dict)
@@ -114,17 +188,6 @@ toml2tex(toml::String) = dict2tex(TOML.parse(toml))
 tex2toml(tex::String) = dict2toml(tex2dict(tex))
 
 include("depot.jl")
-
-function __init__()
-    try
-        repodat = Dict()
-        open(joinpath(homedir(),".julia/vtx-depot.toml"), "r") do f
-            repodat = TOML.parse(read(f,String))
-        end
-        for key in keys(repodat)
-            push!(repos,key=>repodat[key])
-        end
-    end
-end
+include("search.jl")
 
 end # module
