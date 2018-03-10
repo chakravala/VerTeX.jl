@@ -17,9 +17,9 @@ function getdepot()
     return repodat
 end
 
-function save(dat::Dict,path::String)
+function save(dat::Dict,path::String;warn=true)
     out = deepcopy(dat)
-    !haskey(out,"depo") && push!(out,"depot"=>"julia")
+    !haskey(out,"depot") && push!(out,"depot"=>"julia")
     repo = out["depot"]
     depos = getdepot()
     !haskey(depos,repo) && (@warn "did not save, $repo depot not found"; return dat)
@@ -32,7 +32,7 @@ function save(dat::Dict,path::String)
         push!(out,"dir"=>path)
     end
     infotxt = "saving VerTeX: $(out["title"])\n"
-    old = load(dat["dir"],dat["depot"])
+    old = haskey(dat,"dir") ? load(dat["dir"],dat["depot"]) : dat
     for cat ∈ ["ref","deps"]
         list = haskey(old,cat) ? copy(old[cat]) : String[]
         if haskey(out,cat)
@@ -41,8 +41,8 @@ function save(dat::Dict,path::String)
                     h = out["ids"][ref]
                     s = load(h[3],h[2])
                     updaterefby!(s,out;cat="$(cat)by")
-                    save(s)
-                    infotxt *= "updated \\$cat{$ref}\n at $(h[3]) in $(h[2])"
+                    save(s,warn=false)
+                    infotxt *= "updated \\$cat{$ref} at $(h[3]) in $(h[2])\n"
                 end
                 amt = length(list)
                 k = 1
@@ -61,23 +61,23 @@ function save(dat::Dict,path::String)
                 h = old["ids"][ref]
                 s = load(h[3],h[2])
                 updaterefby!(s,out;remove=true,cat="$(cat)by")
-                save(s)
-                infotxt *= "removed \\$cat{$ref}\n at $(h[3]) in $(h[2])"
+                save(s,warn=false)
+                infotxt *= "removed \\$cat{$ref} at $(h[3]) in $(h[2])\n"
             end
         end
     end
     open(way, "w") do f
         write(f, dict2toml(out))
     end
-    @info infotxt*"$path saved in $(dat["depot"])"
+    warn && (@info infotxt*"saved at $path in $(out["depot"])")
     return out
 end
 
-function save(dat::Dict)
-    save(dat, haskey(dat,"dir") ? dat["dir"] : dat["uuid"])
+function save(dat::Dict;warn=true)
+    save(dat, haskey(dat,"dir") ? dat["dir"] : dat["uuid"];warn=warn)
 end
 
-function save(dat::Dict,path::String,repo::String)
+function save(dat::Dict,path::String,repo::String;warn=true)
     out = deepcopy(dat)
     if haskey(dat["depot"])
         rm(joinpath(checkhome(getdepot()[dat["depot"]]),dat["dir"]))
@@ -86,7 +86,7 @@ function save(dat::Dict,path::String,repo::String)
     else
         push!(out,"depot"=>repo,"dir"=>path)
     end
-    save(out,path)
+    save(out,path;warn=warn)
 end
 
 function load(path::String,repo="julia")
@@ -97,4 +97,37 @@ function load(path::String,repo="julia")
         dat = read(f, String)
     end
     return TOML.parse(dat)
+end
+
+function loadpath(data::Dict,file::String="/tmp/doc.tex")
+    load = ""
+    g = getdepot()
+    if haskey(data,"dir") && (data["depot"] ∈ keys(g))
+        load = joinpath(checkhome(g[data["depot"]]),data["dir"])
+        load = replace(load,r".vtx$"=>".tex")
+        !contains(load,r".tex$") && (load = load*".tex")
+    else
+        load = file
+    end
+    return load
+end
+
+function writetex(data::Dict,file::String="/tmp/doc.tex")
+    load = loadpath(data,file)
+    open(load, "w") do f
+        write(f, VerTeX.dict2tex(data))
+    end
+    return load
+end
+
+function readtex(load::String)
+    out = ""
+    open(load, "r") do f
+        out = read(f,String)
+    end
+    return out
+end
+
+function update(data::Dict)
+    save(tex2dict(readtex(loadpath(data)),data))
 end
