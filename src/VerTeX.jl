@@ -6,18 +6,17 @@ module VerTeX
 
 export dict2toml, tex2dict, tex2toml, dict2tex, toml2tex, toml2dict
 
-using Pkg3.TOML, Pkg3.Pkg2, UUIDs, Dates
+using Pkg, UUIDs, Dates
+using Pkg.TOML, Pkg.Pkg2
 
 AUTHOR = "anonymous"
-try
-    global AUTHOR = ENV["AUTHOR"]
-end
+try global AUTHOR = ENV["AUTHOR"] finally end
 
-checkhome(path::String) = contains(path,r"^~/") ? joinpath(homedir(),path[3:end]) : path
+checkhome(path::String) = occursin(r"^~/",path) ? joinpath(homedir(),path[3:end]) : path
 
 function relhome(path::String,home::String=homedir())
     reg = Regex("(?<=^$(replace(home,'/'=>"\\/")))\\/?\\X+")
-    return contains(path,reg) ? '~'*match(reg,path).match : path
+    return occursin(reg,path) ? '~'*match(reg,path).match : path
 end
 
 function preamble(path::String=joinpath(Pkg2.dir("VerTeX"),"vtx/default.tex"))
@@ -63,7 +62,7 @@ function tex2dict(tex::String,data=nothing)
         pre = textagdel(item,pre)
     end
     prereg = "%vtx:"*regtextag*"\n?"
-    contains(pre,Regex(prereg)) && (pre = match(Regex("(?:"*prereg*")\\X+"),pre).match)
+    occursin(Regex(prereg),pre) && (pre = match(Regex("(?:"*prereg*")\\X+"),pre).match)
     pre = replace(pre,r"\n+$"=>"")
     out = deepcopy(data)
     if data == nothing
@@ -173,7 +172,7 @@ function dict2tex(data::Dict)
     date = tomlocate("date",data,"unknown")
     title = tomlocate("title",data,"unknown")
     reg = "^%vtx:"*regtextag
-    if contains(pre,Regex(reg*"\n?"))
+    if occursin(Regex(reg*"\n?"),pre)
         file = match(Regex("(?<=%vtx:)"*regtextag*"(?<=\n)?"),pre).match
         pre = preamble(join(file))*replace(pre,Regex(reg)=>"")
     end

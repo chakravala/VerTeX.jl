@@ -11,7 +11,7 @@ function keycheck(data::Dict{<:Any,<:Any},str::Array{String,1},mode::Array{Symbo
         end
         if ((:search in mode) || (Symbol(key) in mode)) && (typeof(data[key]) == String)
             for s in lowercase.(str)
-                contains(lowercase(data[key]),s) && (found = true)
+                occursin(s,lowercase(data[key])) && (found = true)
             end
         end
         if (((key == "label") && (:label in mode)) ||
@@ -52,5 +52,5 @@ function searchvtx(mode::Array{Symbol,1},str::Array{String,1})
     end
     return list
 end
-searchvtx(mode::Symbol,str::String...) = search([mode],collect(str))
-searchvtx(str::String,mode::Symbol...) = search(collect(mode),[str])
+searchvtx(mode::Symbol,str::String...) = searchvtx([mode],collect(str))
+searchvtx(str::String,mode::Symbol...) = searchvtx(collect(mode),[str])

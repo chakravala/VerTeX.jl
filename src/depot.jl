@@ -10,6 +10,7 @@ function getdepot()
         open(joinpath(homedir(),".julia/vtx-depot.toml"), "r") do f
             repodat = TOML.parse(read(f,String))
         end
+    catch
     end
     for key in keys(repos)
         push!(repodat,key=>repos[key])
@@ -80,7 +81,7 @@ end
 function save(dat::Dict,path::String,repo::String;warn=true)
     out = deepcopy(dat)
     if haskey(dat["depot"])
-        rm(joinpath(checkhome(getdepot()[dat["depot"]]),dat["dir"]))
+        #rm(joinpath(checkhome(getdepot()[dat["depot"]]),dat["dir"]))
         out["depot"] = repo
         out["dir"] = path
     else
@@ -105,7 +106,7 @@ function loadpath(data::Dict,file::String="/tmp/doc.tex")
     if haskey(data,"dir") && (data["depot"] ∈ keys(g))
         load = joinpath(checkhome(g[data["depot"]]),data["dir"])
         load = replace(load,r".vtx$"=>".tex")
-        !contains(load,r".tex$") && (load = load*".tex")
+        !occursin(r".tex$",load) && (load = load*".tex")
     else
         load = file
     end
