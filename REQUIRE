@@ -2,3 +2,4 @@ julia 0.7.0-DEV.4375
 Pkg
 UUIDs
 Dates
+TerminalMenus

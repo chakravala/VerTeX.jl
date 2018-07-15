@@ -50,22 +50,59 @@ function texlocate(tag::Symbol,tex::String,neg::String="none")
     return isempty(out) ? [neg] : join.(out)
 end
 
+function lbllocate(tex::String,neg::String="none")
+    out = collect((m.match for m = eachmatch(Regex("(?<=\\\\lbl{)"*regtextag*"(}{)"*regtextag*"(?=})"), tex)))
+    return isempty(out) ? [neg] : replace.(join.(out), Ref("}{"=>":"))
+end
+
 tomlocate(tag::String,data::Dict,neg::String="none") = haskey(data,tag) ? data[tag] : neg
 
-function tex2dict(tex::String,data=nothing)
+setval!(d::Dict,key,val) = haskey(d,key) ? (d[key] = val) : push!(d,key=>val)
+addval!(d::Dict,key,val) = haskey(d,key) ? (val ∉ d[key] && push!(d[key],val)) : push!(d,key=>Any[val])
+addkey!(d::Dict,key,val,pair) = !haskey(d[key],val) && push!(d[key],val=>pair)
+
+function tex2dict(tex::String,data=nothing,disp=false)
     tim = Dates.unix2datetime(time())
-    (pre,doc) = String.(split(split(tex,"\n\\end{document}")[1],"\n\\begin{document}\n"))
-    author = texlocate(:author,pre,"unknown")[1]
-    date = texlocate(:date,pre,"unknown")[1]
-    title = texlocate(:title,pre,"unknown")[1]
+    uid = UUIDs.uuid1()
+    pd = String.(split(split(tex,"\n\\end{document}")[1],"\n\\begin{document}\n"))
+    (pre,doc) = length(pd) == 1 ? ["default",pd] : pd
+    unk = "unknown"
+    author = texlocate(:author,pre,data ≠ nothing ? data["author"] : unk)[1]
+    date = texlocate(:date,pre,data ≠ nothing ? data["date"] : unk)[1]
+    title = texlocate(:title,pre,data ≠ nothing ? data["title"] : unk)[1]
     for item ∈ [:author,:date,:title]
         pre = textagdel(item,pre)
     end
     prereg = "%vtx:"*regtextag*"\n?"
     occursin(Regex(prereg),pre) && (pre = match(Regex("(?:"*prereg*")\\X+"),pre).match)
     pre = replace(pre,r"\n+$"=>"")
+    cp = split(doc,r"%extend:((true)|(false))\n?";limit=2)
+    choice = match(r"(?<=%extend:)((true)|(false))(?=\n)?",doc)
+    extend = choice ≠ nothing ? parse(choice.match) : true
+    compact = !occursin(r"%vtx:",cp[1]) && (length(cp) > 1) ? !extend : true
+    remdoc = ""
+    if compact
+        doc = join(cp[1])
+    elseif choice ≠ nothing
+        remdoc = "$(cp[2])\n"
+        doc = join(cp[1])
+    else
+        remdoc = "$doc\n"
+        doc = join(split(doc,Regex(prereg);limit=2)[1])
+    end
+    if |(([author,date,title] .== unk)...)
+        @info "Missing VerTeX metadata for $uid"
+        println(disp ? data["tex"] : doc)
+        println("%rev:",disp ? data["revised"] : tim)
+        print("title: ")
+        title == unk ? (title = readline()) : println(title)
+        print("author: ")
+        author == unk ? (author = readline()) : println(author)
+        print("date: ")
+        date == unk ? (date = readline()) : println(date)
+    end
     out = deepcopy(data)
-    if data == nothing
+    if out == nothing
         out = Dict(
             "editor" => AUTHOR,
             "author" => author,
@@ -75,28 +112,71 @@ function tex2dict(tex::String,data=nothing)
             "title" => title,
             "created" => "$tim",
             "revised" => "$tim",
-            "uuid" => "$(UUIDs.uuid1())",
+            "uuid" => "$uid",
             "version" => ["VerTeX", "v\"0.1.0\""],
-            "ids" => Dict())
+            "ids" => Dict(),
+            "compact" => "$compact") #twins, show, showby
     else
-        out["editor"] = AUTHOR
-        out["author"] = author
-        out["pre"] = pre
-        out["tex"] = doc
-        out["date"] = date
-        out["title"] = title
-        out["revised"] = "$tim"
+        setval!(out,"editor",AUTHOR)
+        setval!(out,"author",author)
+        setval!(out,"pre",pre)
+        setval!(out,"tex",doc)
+        setval!(out,"date",date)
+        setval!(out,"title",title)
+        setval!(out,"revised","$tim")
+        setval!(out,"compact","$compact")
+        !haskey(out,"ids") && push!(out,"ids"=>Dict())
     end
-    items = ["ref","cite","label","deps"] # "refby", "citeby", "depsby"
-    for item ∈ items
-        temp = texlocate(Symbol(item),doc)
+    extra = []
+    comments = []
+    if !compact
+        while occursin(Regex(prereg),remdoc)
+            ms = join.(collect((m.match for m = eachmatch(Regex(prereg),remdoc))))[1]
+            sp = split(remdoc,ms;limit=3)
+            push!(comments,choice ≠ nothing ? join(sp[1]) : "")
+            re = rsplit(sp[2],"%rev:";limit=2)
+            dc = length(re) == 1 ? tim : DateTime(chomp(re[2]))
+            # try to open it, to see if update
+            df = split(join(match(Regex("(?<=%vtx:)"*regtextag*"(?<=\n)?"),ms).match),":#:";limit=2)
+            file = join(df[end])
+            depo = length(df) > 1 ? join(df[1]) : "julia"
+            ods = nothing
+            add2q = true
+            try
+                ods = load(file,depo)
+                add2q = DateTime(ods["revised"]) == dc && ods["tex"] ≠ chomp(join(re[1]))
+                # check date and compare if opened
+                # terminal menu if date is not a mach
+            catch
+            end
+            ds = tex2dict(pre*"\n\\begin{document}\n"*re[1]*"\n\\end{document}",ods,!add2q)
+            push!(extra,ds["compact"])
+            addval!(out,"show",ds["uuid"])
+            addkey!(out,"ids",ds["uuid"],[ds["uuid"], depo, file])
+            # add to save queue, for when actual save happens
+            add2q && addval!(out,"save",ds)
+            remdoc = join(sp[3])
+        end
+        push!(comments,remdoc)
+        setval!(out,"comments",comments)
+        setval!(out,"extend",extra)
+    else
+        for item ∈ ["show","comments","extend"]
+            haskey(out,item) && pop!(out,item)
+        end
+    end
+    bins = ["ref","used","deps"]
+    items = [bins...,"cite","label","lbl"] # "refby", "citeby", "depsby"
+    for it ∈ items
+        temp = it == "lbl" ? lbllocate(doc) : texlocate(Symbol(it),doc)
+        item = it == "lbl" ? "label" : it
         if temp ≠ ["none"]
-            haskey(out,item) ? (out[item] = temp) : push!(out,item=>temp)
+            setval!(out,item,temp)
         else
             haskey(out,item) && pop!(out,item)
         end
     end
-    for cat ∈ ["ref","deps"]
+    for cat ∈ bins
         haskey(out,cat) && for ref in out[cat]
             if haskey(out["ids"],ref)
                 !checkuuid(out["ids"][ref]...,ref) && updateref!(out,ref)
@@ -106,19 +186,19 @@ function tex2dict(tex::String,data=nothing)
         end
     end
     haskey(out,"label") && for lbl in out["label"]
-        for cat ∈ [:ref,:deps]
+        for cat ∈ [:ref,:deps,:use]
             result = searchvtx([cat],[lbl])
             for v ∈ result
                 updaterefby!(out,v;cat="$(cat)by")
             end
         end
     end
-    for cat ∈ ["refby","depsby"]
+    for cat ∈ ([bins...,"show"] .* "by")
         haskey(out,cat) && isempty(out[cat]) && pop!(out,cat)
     end
     for key in keys(out["ids"])
         found = false
-        for item ∈ ["cite","deps","ref"]
+        for item ∈ ["cite","show",bins...]
             haskey(out,item) && (key ∈ out[item]) && (found = true)
         end
         (key == out["author"]) && (found = true)
@@ -165,22 +245,46 @@ function updaterefby!(out,v;remove=false,cat::String="refby")
     
 end
 
-function dict2tex(data::Dict)
-    pre = tomlocate("pre",data)
+function preload(data::Dict,compact::Bool,rev::Bool=true)
     doc = tomlocate("tex",data)
-    author = tomlocate("author",data,"unknown")
-    date = tomlocate("date",data,"unknown")
-    title = tomlocate("title",data,"unknown")
+    if !compact && haskey(data,"comments") && length(data["comments"]) > 0
+        if data["comments"][1] ≠ ""
+            doc *= "\n%extend:true\n" * data["comments"][1]
+        end
+        if haskey(data,"show")
+            for k ∈ 1:length(data["show"])
+                key = data["show"][k]
+                d = data["ids"][key]
+                ta = ""
+                try
+                    ta = preload(load(d[3],d[2]),parse(data["extend"][k]))
+                catch
+                end
+                dep = data["depot"] ≠ "julia" ? "$(data["depot"]):#:" : ""
+                vtx = "\n%vtx:$dep$(d[3])\n"
+                doc *= join([vtx,ta,vtx,data["comments"][k+1]])
+            end
+        end
+    end
+    return rev ? "$doc\n%rev:$(data["revised"])" : doc
+end
+
+function dict2tex(data::Dict)
+    unk = "unknown"
+    pre = tomlocate("pre",data)
+    author = tomlocate("author",data,unk)
+    date = tomlocate("date",data,unk)
+    title = tomlocate("title",data,unk)
     reg = "^%vtx:"*regtextag
     if occursin(Regex(reg*"\n?"),pre)
         file = match(Regex("(?<=%vtx:)"*regtextag*"(?<=\n)?"),pre).match
         pre = preamble(join(file))*replace(pre,Regex(reg)=>"")
     end
     tex = pre*"\n"
-    author ≠ "unknown" && (tex *= "\n\\author{$author}")
-    date ≠ "unknown" && (tex *= "\n\\date{$date}")
-    title ≠ "unknown" && (tex *= "\n\\title{$title}")
-    return article(doc,tex)
+    author ≠ unk && (tex *= "\n\\author{$author}")
+    date ≠ unk && (tex *= "\n\\date{$date}")
+    title ≠ unk && (tex *= "\n\\title{$title}")
+    return article(preload(data,false,false),tex)
 end
 
 toml2tex(toml::String) = dict2tex(TOML.parse(toml))

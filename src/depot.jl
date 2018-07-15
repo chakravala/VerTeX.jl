@@ -34,7 +34,15 @@ function save(dat::Dict,path::String;warn=true)
     end
     infotxt = "saving VerTeX: $(out["title"])\n"
     old = haskey(dat,"dir") ? load(dat["dir"],dat["depot"]) : dat
-    for cat ∈ ["ref","deps"]
+    # go through save queue from show list
+    if haskey(out,"save")
+        for it ∈ out["save"]
+            save(it,out["ids"][it["uuid"]][3];warn=warn)
+        end
+        pop!(out,"save")
+    end
+    haskey(out,"compact") && pop!(out,"compact")
+    for cat ∈ ["ref","deps","used","show"]
         list = haskey(old,cat) ? copy(old[cat]) : String[]
         if haskey(out,cat)
             for ref ∈ out[cat]
@@ -116,6 +124,7 @@ end
 function writetex(data::Dict,file::String="/tmp/doc.tex")
     load = loadpath(data,file)
     open(load, "w") do f
+        # check if tex file actually needs to be updated?
         write(f, VerTeX.dict2tex(data))
     end
     return load
