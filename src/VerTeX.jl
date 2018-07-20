@@ -19,12 +19,15 @@ function relhome(path::String,home::String=homedir())
     return occursin(reg,path) ? '~'*match(reg,path).match : path
 end
 
-function preamble(path::String=joinpath(Pkg2.dir("VerTeX"),"vtx/default.tex"))
+function preamble(path::String="default.tex",repo::String="julia")
+    depos = getdepot()
+    !haskey(depos,repo) && throw(error("did not load preamble, $repo depot not found"))
     load = ""
-    open(checkhome(path), "r") do f
+    open(joinpath(checkhome(depos[repo]),path), "r") do f
         load = read(f,String)
     end
-    return load*"%vtx:$(relhome(path))"
+    dep = repo ≠ "julia" ? "$repo:~:" : ""
+    return load*"%vtx:$dep$(relhome(path))"
 end
 
 function article(str::String,pre::String=preamble()*"\n")
@@ -79,17 +82,18 @@ function tex2dict(tex::String,data=nothing,disp=false)
     cp = split(doc,r"%extend:((true)|(false))\n?";limit=2)
     choice = match(r"(?<=%extend:)((true)|(false))(?=\n)?",doc)
     extend = choice ≠ nothing ? parse(choice.match) : true
-    compact = !occursin(r"%vtx:",cp[1]) && (length(cp) > 1) ? !extend : true
+    compact = !occursin(r"%vtx:",cp[1]) && !((length(cp) > 1) ? extend : true)
     remdoc = ""
     if compact
-        doc = join(cp[1])
+        doc = cp[1]
     elseif choice ≠ nothing
         remdoc = "$(cp[2])\n"
-        doc = join(cp[1])
+        doc = cp[1]
     else
         remdoc = "$doc\n"
-        doc = join(split(doc,Regex(prereg);limit=2)[1])
+        doc = split(doc,Regex(prereg);limit=2)[1]
     end
+    doc = join(chomp(doc))
     if |(([author,date,title] .== unk)...)
         @info "Missing VerTeX metadata for $uid"
         println(disp ? data["tex"] : doc)
@@ -133,11 +137,11 @@ function tex2dict(tex::String,data=nothing,disp=false)
         while occursin(Regex(prereg),remdoc)
             ms = join.(collect((m.match for m = eachmatch(Regex(prereg),remdoc))))[1]
             sp = split(remdoc,ms;limit=3)
-            push!(comments,choice ≠ nothing ? join(sp[1]) : "")
+            push!(comments,compact ? "" : join(chomp(sp[1])))
             re = rsplit(sp[2],"%rev:";limit=2)
             dc = length(re) == 1 ? tim : DateTime(chomp(re[2]))
             # try to open it, to see if update
-            df = split(join(match(Regex("(?<=%vtx:)"*regtextag*"(?<=\n)?"),ms).match),":#:";limit=2)
+            df = split(join(match(Regex("(?<=%vtx:)"*regtextag*"(?<=\n)?"),ms).match),":~:";limit=2)
             file = join(df[end])
             depo = length(df) > 1 ? join(df[1]) : "julia"
             ods = nothing
@@ -157,7 +161,8 @@ function tex2dict(tex::String,data=nothing,disp=false)
             add2q && addval!(out,"save",ds)
             remdoc = join(sp[3])
         end
-        push!(comments,remdoc)
+        push!(comments,join(chomp(remdoc)))
+        choice == nothing && popfirst!(comments)
         setval!(out,"comments",comments)
         setval!(out,"extend",extra)
     else
@@ -245,28 +250,32 @@ function updaterefby!(out,v;remove=false,cat::String="refby")
     
 end
 
-function preload(data::Dict,compact::Bool,rev::Bool=true)
+function preload(data::Dict,extend::Bool,rev::Bool=true)
     doc = tomlocate("tex",data)
-    if !compact && haskey(data,"comments") && length(data["comments"]) > 0
-        if data["comments"][1] ≠ ""
-            doc *= "\n%extend:true\n" * data["comments"][1]
+    if extend && haskey(data,"comments") && length(data["comments"]) > 0
+        shift = 0
+        ls = haskey(data,"show") ? length(data["show"]) : 0
+        if length(data["comments"]) ≠ ls
+            doc *= "\n%extend:true\n$(data["comments"][1])"
+            shift += 1
         end
-        if haskey(data,"show")
-            for k ∈ 1:length(data["show"])
+        if ls > 0
+            for k ∈ 1:ls
                 key = data["show"][k]
                 d = data["ids"][key]
                 ta = ""
                 try
                     ta = preload(load(d[3],d[2]),parse(data["extend"][k]))
                 catch
+                    @warn "could not load $(d[3]) from $(d[2])"
                 end
-                dep = data["depot"] ≠ "julia" ? "$(data["depot"]):#:" : ""
+                dep = data["depot"] ≠ "julia" ? "$(data["depot"]):~:" : ""
                 vtx = "\n%vtx:$dep$(d[3])\n"
-                doc *= join([vtx,ta,vtx,data["comments"][k+1]])
+                doc *= join([vtx,ta,vtx,data["comments"][k+shift]])
             end
         end
     end
-    return rev ? "$doc\n%rev:$(data["revised"])" : doc
+    return rev ? "$doc\n%rev:$(data["revised"])" : doc*"\n"
 end
 
 function dict2tex(data::Dict)
@@ -275,16 +284,20 @@ function dict2tex(data::Dict)
     author = tomlocate("author",data,unk)
     date = tomlocate("date",data,unk)
     title = tomlocate("title",data,unk)
+    dep = data["depot"] ≠ "julia" ? "$(data["depot"]):~:" : ""
     reg = "^%vtx:"*regtextag
     if occursin(Regex(reg*"\n?"),pre)
-        file = match(Regex("(?<=%vtx:)"*regtextag*"(?<=\n)?"),pre).match
-        pre = preamble(join(file))*replace(pre,Regex(reg)=>"")
+        prereg = "(?<=%vtx:)"*regtextag*"(?<=\n)?"
+        df = split(join(match(Regex(prereg),pre).match),":~:";limit=2)
+        file = join(df[end])
+        depo = length(df) > 1 ? join(df[1]) : "julia"
+        pre = preamble(file,depo)*replace(pre,Regex(reg)=>"")
     end
     tex = pre*"\n"
     author ≠ unk && (tex *= "\n\\author{$author}")
     date ≠ unk && (tex *= "\n\\date{$date}")
     title ≠ unk && (tex *= "\n\\title{$title}")
-    return article(preload(data,false,false),tex)
+    return article(join(chomp(preload(data,true,false))),tex)
 end
 
 toml2tex(toml::String) = dict2tex(TOML.parse(toml))
