@@ -46,12 +46,15 @@ function save(dat::Dict,path::String;warn=true)
         list = haskey(old,cat) ? copy(old[cat]) : String[]
         if haskey(out,cat)
             for ref ∈ out[cat]
-                if haskey(out["ids"],ref)
+                if haskey(out,"ids") && haskey(out["ids"],ref)
                     h = out["ids"][ref]
-                    s = load(h[3],h[2])
-                    updaterefby!(s,out;cat="$(cat)by")
-                    save(s,warn=false)
-                    infotxt *= "updated \\$cat{$ref} at $(h[3]) in $(h[2])\n"
+                    if (h[2] ≠ repo) && (h[3] ≠ path)
+                        s = load(h[3],h[2])
+                        if updaterefby!(s,out;cat="$(cat)by")
+                            save(s,warn=false)
+                            infotxt *= "updated \\$cat{$ref} at $(h[3]) in $(h[2])\n"
+                        end
+                    end
                 end
                 amt = length(list)
                 k = 1
@@ -66,12 +69,15 @@ function save(dat::Dict,path::String;warn=true)
             end
         end
         for ref ∈ list
-            if haskey(old["ids"],ref)
+            if haskey(old,"ids") && haskey(old["ids"],ref)
                 h = old["ids"][ref]
-                s = load(h[3],h[2])
-                updaterefby!(s,out;remove=true,cat="$(cat)by")
-                save(s,warn=false)
-                infotxt *= "removed \\$cat{$ref} at $(h[3]) in $(h[2])\n"
+                if (h[2] ≠ repo) && (h[3] ≠ path)
+                    s = load(h[3],h[2])
+                    if updaterefby!(s,out;remove=true,cat="$(cat)by")
+                        save(s,warn=false)
+                        infotxt *= "removed \\$cat{$ref} at $(h[3]) in $(h[2])\n"
+                    end
+                end
             end
         end
     end

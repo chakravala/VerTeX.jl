@@ -81,7 +81,7 @@ function tex2dict(tex::String,data=nothing,disp=false)
     pre = replace(pre,r"\n+$"=>"")
     cp = split(doc,r"%extend:((true)|(false))\n?";limit=2)
     choice = match(r"(?<=%extend:)((true)|(false))(?=\n)?",doc)
-    extend = choice ≠ nothing ? parse(choice.match) : true
+    extend = choice ≠ nothing ? Meta.parse(choice.match) : true
     compact = !occursin(r"%vtx:",cp[1]) && !((length(cp) > 1) ? extend : true)
     remdoc = ""
     if compact
@@ -93,6 +93,7 @@ function tex2dict(tex::String,data=nothing,disp=false)
         remdoc = "$doc\n"
         doc = split(doc,Regex(prereg);limit=2)[1]
     end
+    if occursin(r"%vtx:",cp[1]) && (remdoc = match(Regex(prereg*"\\X+"),pd[end]).match)
     doc = join(chomp(doc))
     if |(([author,date,title] .== unk)...)
         @info "Missing VerTeX metadata for $uid"
@@ -139,7 +140,7 @@ function tex2dict(tex::String,data=nothing,disp=false)
             sp = split(remdoc,ms;limit=3)
             push!(comments,compact ? "" : join(chomp(sp[1])))
             re = rsplit(sp[2],"%rev:";limit=2)
-            dc = length(re) == 1 ? tim : DateTime(chomp(re[2]))
+            dc = length(re) == 1 ? tim : DateTime(match(Regex(regtextag*"(?<=\n)?"),re[2]).match)
             # try to open it, to see if update
             df = split(join(match(Regex("(?<=%vtx:)"*regtextag*"(?<=\n)?"),ms).match),":~:";limit=2)
             file = join(df[end])
@@ -154,7 +155,7 @@ function tex2dict(tex::String,data=nothing,disp=false)
             catch
             end
             ds = tex2dict(pre*"\n\\begin{document}\n"*re[1]*"\n\\end{document}",ods,!add2q)
-            push!(extra,ds["compact"])
+            push!(extra,repr(!Meta.parse(ds["compact"])))
             addval!(out,"show",ds["uuid"])
             addkey!(out,"ids",ds["uuid"],[ds["uuid"], depo, file])
             # add to save queue, for when actual save happens
@@ -231,23 +232,28 @@ end
 
 function updaterefby!(out,v;remove=false,cat::String="refby")
     n = [v["uuid"],v["depot"],v["dir"]]
+    update = true
     if haskey(out,cat)
         amt = length(out[cat])
         k = 1
         while k ≤ amt
-            if out[cat][k][1] == v["uuid"]
-                deleteat!(out[cat],k)
-                amt -= 1
+            if out[cat][k][1] == n[1]
+                if ((out[cat][k][2] ≠ n[2] | out[cat][k][3] ≠ n[3]) | remove)
+                    deleteat!(out[cat],k)
+                    amt -= 1
+                else
+                    update = false
+                end
             else
                 k += 1
             end
         end
-        !remove && push!(out[cat],n)
+        !remove && update && push!(out[cat],n)
         isempty(out[cat]) && pop!(out,cat)
     else
-        !remove && push!(out,"refby"=>[n])
+        !remove && update && push!(out,"refby"=>[n])
     end
-    
+    return update
 end
 
 function preload(data::Dict,extend::Bool,rev::Bool=true)
