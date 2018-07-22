@@ -69,6 +69,7 @@ function tex2dict(tex::String,data=nothing,disp=false)
     uid = UUIDs.uuid1()
     pd = String.(split(split(tex,"\n\\end{document}")[1],"\n\\begin{document}\n"))
     (pre,doc) = length(pd) == 1 ? ["default",pd] : pd
+    ## locate identifying info
     unk = "unknown"
     author = texlocate(:author,pre,data ≠ nothing ? data["author"] : unk)[1]
     date = texlocate(:date,pre,data ≠ nothing ? data["date"] : unk)[1]
@@ -76,6 +77,20 @@ function tex2dict(tex::String,data=nothing,disp=false)
     for item ∈ [:author,:date,:title]
         pre = textagdel(item,pre)
     end
+    ## date check
+    docre = rsplit(doc,"%rev:";limit=2)
+    docdc = if (length(docre) == 1)
+        tim
+    elseif occursin(r"%vtx:",docre[2])
+        tim
+    else
+        doc = docre[1]
+        DateTime(match(Regex(regtextag*"(?<=\n)?"),docre[2]).match)
+    end
+    if (data ≠ nothing) && (docdc ≠ DateTime(data["revised"]))
+        throw(error("VerTeX: unable to merge into \"$(data["dir"])\" (last edited on $(data["revised"])), invalid date stamp $docdc\n\ntitle: $title\nauthor: $author\ndate: $date\n\n$doc"))
+    end
+    ## deconstruct VerTeX
     prereg = "%vtx:"*regtextag*"\n?"
     occursin(Regex(prereg),pre) && (pre = match(Regex("(?:"*prereg*")\\X+"),pre).match)
     pre = replace(pre,r"\n+$"=>"")
@@ -93,7 +108,7 @@ function tex2dict(tex::String,data=nothing,disp=false)
         remdoc = "$doc\n"
         doc = split(doc,Regex(prereg);limit=2)[1]
     end
-    if occursin(r"%vtx:",cp[1]) && (remdoc = match(Regex(prereg*"\\X+"),pd[end]).match)
+    occursin(r"%vtx:",cp[1]) && (remdoc = match(Regex(prereg*"\\X+"),pd[end]).match)
     doc = join(chomp(doc))
     if |(([author,date,title] .== unk)...)
         @info "Missing VerTeX metadata for $uid"
@@ -132,6 +147,7 @@ function tex2dict(tex::String,data=nothing,disp=false)
         setval!(out,"compact","$compact")
         !haskey(out,"ids") && push!(out,"ids"=>Dict())
     end
+    ## parse additional vertices
     extra = []
     comments = []
     if !compact
@@ -154,7 +170,7 @@ function tex2dict(tex::String,data=nothing,disp=false)
                 # terminal menu if date is not a mach
             catch
             end
-            ds = tex2dict(pre*"\n\\begin{document}\n"*re[1]*"\n\\end{document}",ods,!add2q)
+            ds = tex2dict(pre*"\n\\begin{document}\n"*sp[2]*"\n\\end{document}",ods,!add2q)
             push!(extra,repr(!Meta.parse(ds["compact"])))
             addval!(out,"show",ds["uuid"])
             addkey!(out,"ids",ds["uuid"],[ds["uuid"], depo, file])
@@ -171,6 +187,7 @@ function tex2dict(tex::String,data=nothing,disp=false)
             haskey(out,item) && pop!(out,item)
         end
     end
+    ## double check reference nodes
     bins = ["ref","used","deps"]
     items = [bins...,"cite","label","lbl"] # "refby", "citeby", "depsby"
     for it ∈ items
@@ -256,7 +273,7 @@ function updaterefby!(out,v;remove=false,cat::String="refby")
     return update
 end
 
-function preload(data::Dict,extend::Bool,rev::Bool=true)
+function preload(data::Dict,extend::Bool)
     doc = tomlocate("tex",data)
     if extend && haskey(data,"comments") && length(data["comments"]) > 0
         shift = 0
@@ -281,7 +298,7 @@ function preload(data::Dict,extend::Bool,rev::Bool=true)
             end
         end
     end
-    return rev ? "$doc\n%rev:$(data["revised"])" : doc*"\n"
+    return "$doc\n%rev:$(data["revised"])"
 end
 
 function dict2tex(data::Dict)
@@ -303,7 +320,7 @@ function dict2tex(data::Dict)
     author ≠ unk && (tex *= "\n\\author{$author}")
     date ≠ unk && (tex *= "\n\\date{$date}")
     title ≠ unk && (tex *= "\n\\title{$title}")
-    return article(join(chomp(preload(data,true,false))),tex)
+    return article(join(chomp(preload(data,true))),tex)
 end
 
 toml2tex(toml::String) = dict2tex(TOML.parse(toml))
