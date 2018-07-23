@@ -6,7 +6,7 @@ module VerTeX
 
 export dict2toml, tex2dict, tex2toml, dict2tex, toml2tex, toml2dict
 
-using Pkg, UUIDs, Dates
+using Pkg, UUIDs, Dates, TerminalMenus
 using Pkg.TOML, Pkg.Pkg2
 
 AUTHOR = "anonymous"
@@ -64,6 +64,24 @@ setval!(d::Dict,key,val) = haskey(d,key) ? (d[key] = val) : push!(d,key=>val)
 addval!(d::Dict,key,val) = haskey(d,key) ? (val ∉ d[key] && push!(d[key],val)) : push!(d,key=>Any[val])
 addkey!(d::Dict,key,val,pair) = !haskey(d[key],val) && push!(d[key],val=>pair)
 
+function checkmerge(a::DateTime,data,title,author,date,doc,msg="Merge conflict detected, proceed?")
+    errors = ["",""]
+    if a ≠ DateTime(data["revised"])
+        errors[1] = "VerTeX: unable to merge into \"$(data["dir"])\" ($(data["revised"]))"
+        errors[2] = "BUFFER: invalid date stamp $a"
+    end
+    if errors ≠ ["",""]
+        @warn "$(errors[1])"
+        @info "$(data["title"]) by $(data["author"]) ($(data["date"]))\n$(data["tex"])"
+        @warn "$(errors[2])"
+        @info "$title by $author ($date)\n$doc"
+        return request(msg,RadioMenu(["skip","merge"])) < 2 ? true : false
+    end
+    return false
+end
+
+checkmerge(a::String,data) = checkmerge(DateTime(a),data)
+
 function tex2dict(tex::String,data=nothing,disp=false)
     tim = Dates.unix2datetime(time())
     uid = UUIDs.uuid1()
@@ -79,17 +97,16 @@ function tex2dict(tex::String,data=nothing,disp=false)
     end
     ## date check
     docre = rsplit(doc,"%rev:";limit=2)
-    docdc = if (length(docre) == 1)
-        tim
+    if (length(docre) == 1)
+        docdc = tim
     elseif occursin(r"%vtx:",docre[2])
-        tim
+        docdc = tim
     else
         doc = docre[1]
-        DateTime(match(Regex(regtextag*"(?<=\n)?"),docre[2]).match)
+        docdc = DateTime(match(Regex(regtextag*"(?<=\n)?"),docre[2]).match)
     end
-    if (data ≠ nothing) && (docdc ≠ DateTime(data["revised"]))
-        throw(error("VerTeX: unable to merge into \"$(data["dir"])\" (last edited on $(data["revised"])), invalid date stamp $docdc\n\ntitle: $title\nauthor: $author\ndate: $date\n\n$doc"))
-    end
+    (data ≠ nothing) && checkmerge(docdc,data,title,author,date,doc) && 
+        throw(error("VerTeX unable to proceed due to merge failure"))
     ## deconstruct VerTeX
     prereg = "%vtx:"*regtextag*"\n?"
     occursin(Regex(prereg),pre) && (pre = match(Regex("(?:"*prereg*")\\X+"),pre).match)
@@ -108,7 +125,7 @@ function tex2dict(tex::String,data=nothing,disp=false)
         remdoc = "$doc\n"
         doc = split(doc,Regex(prereg);limit=2)[1]
     end
-    occursin(r"%vtx:",cp[1]) && (remdoc = match(Regex(prereg*"\\X+"),pd[end]).match)
+    occursin(r"%vtx:",cp[1]) && (remdoc = match(Regex(prereg*"\\X+"),docre[1]).match)
     doc = join(chomp(doc))
     if |(([author,date,title] .== unk)...)
         @info "Missing VerTeX metadata for $uid"
@@ -143,7 +160,7 @@ function tex2dict(tex::String,data=nothing,disp=false)
         setval!(out,"tex",doc)
         setval!(out,"date",date)
         setval!(out,"title",title)
-        setval!(out,"revised","$tim")
+        setval!(out,"edit","$tim")
         setval!(out,"compact","$compact")
         !haskey(out,"ids") && push!(out,"ids"=>Dict())
     end

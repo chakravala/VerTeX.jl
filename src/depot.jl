@@ -24,6 +24,12 @@ function save(dat::Dict,path::String;warn=true)
     repo = out["depot"]
     depos = getdepot()
     !haskey(depos,repo) && (@warn "did not save, $repo depot not found"; return dat)
+    try
+        data = load(path,repo)
+        data ≠ nothing && checkmerge(dat["revised"],data,dat["title"],dat["author"],dat["date"],dat["tex"],"Save/Overwrite?") &&
+            (@warn "skipped saving $path"; return dat)
+    catch
+    end
     way = joinpath(checkhome(depos[repo]),path)
     !isdir(dirname(way)) && mkpath(dirname(way))
     if haskey(dat,"dir") && (dat["dir"] ≠ path)
@@ -80,6 +86,10 @@ function save(dat::Dict,path::String;warn=true)
                 end
             end
         end
+    end
+    if haskey(out,"edit")
+        setval!(out,"revised",out["edit"])
+        pop!(out,"edit")
     end
     open(way, "w") do f
         write(f, dict2toml(out))
