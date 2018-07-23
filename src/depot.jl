@@ -27,20 +27,27 @@ function save(dat::Dict,path::String;warn=true)
     data = nothing
     try
         data = load(path,repo)
-        data ≠ nothing && checkmerge(dat["revised"],data,dat["title"],dat["author"],dat["date"],dat["tex"],"Save/Overwrite?") &&
-            (@warn "skipped saving $path"; return dat)
+        if (data ≠ nothing)
+            cmv = checkmerge(dat["revised"],data,dat["title"],dat["author"],dat["date"],dat["tex"],"Save/Overwrite?")
+            if cmv == 0
+                throw(error("VerTeX unable to proceed due to merge failure"))
+            elseif cmv < 2
+                @warn "skipped saving $path"
+                return dat
+            end
+        end
     catch
     end
     way = joinpath(checkhome(depos[repo]),path)
     !isdir(dirname(way)) && mkpath(dirname(way))
     if haskey(dat,"dir") && (dat["dir"] ≠ path)
-        rm(joinpath(checkhome(depos[repo]),dat["dir"]))
+        #rm(joinpath(checkhome(depos[repo]),dat["dir"]))
         out["dir"] = path
     else
         push!(out,"dir"=>path)
     end
     infotxt = "saving VerTeX: $(out["title"])\n"
-    old = haskey(dat,"dir") ? load(dat["dir"],dat["depot"]) : dat
+    old = data ≠ nothing ? data : dat
     # go through save queue from show list
     if haskey(out,"save")
         for it ∈ out["save"]
@@ -146,6 +153,7 @@ end
 
 function writetex(data::Dict,file::String="/tmp/doc.tex")
     load = loadpath(data,file)
+    # check if file actually exists yet, if not create it.
     open(load, "w") do f
         # check if tex file actually needs to be updated?
         write(f, VerTeX.dict2tex(data))

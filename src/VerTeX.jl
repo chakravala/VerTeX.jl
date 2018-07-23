@@ -65,6 +65,7 @@ addval!(d::Dict,key,val) = haskey(d,key) ? (val ∉ d[key] && push!(d[key],val))
 addkey!(d::Dict,key,val,pair) = !haskey(d[key],val) && push!(d[key],val=>pair)
 
 function checkmerge(a::DateTime,data,title,author,date,doc,msg="Merge conflict detected, proceed?")
+    val = 2
     errors = ["",""]
     if a ≠ DateTime(data["revised"])
         errors[1] = "VerTeX: unable to merge into \"$(data["dir"])\" ($(data["revised"]))"
@@ -75,12 +76,12 @@ function checkmerge(a::DateTime,data,title,author,date,doc,msg="Merge conflict d
         @info "$(data["title"]) by $(data["author"]) ($(data["date"]))\n$(data["tex"])"
         @warn "$(errors[2])"
         @info "$title by $author ($date)\n$doc"
-        return request(msg,RadioMenu(["skip","merge"])) < 2 ? true : false
+        val = request(msg,RadioMenu(["skip / discard","merge / replace"]))
     end
-    return false
+    return val
 end
 
-checkmerge(a::String,data) = checkmerge(DateTime(a),data)
+checkmerge(a::String,data,title,author,date,doc,msg="Merge conflict detected, proceed?") = checkmerge(DateTime(a),data,title,author,date,doc,msg)
 
 function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
     tim = Dates.unix2datetime(time())
@@ -95,6 +96,9 @@ function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
     for item ∈ [:author,:date,:title]
         pre = textagdel(item,pre)
     end
+    prereg = "%vtx:"*regtextag*"\n?"
+    occursin(Regex(prereg),pre) && (pre = match(Regex("(?:"*prereg*")\\X+"),pre).match)
+    pre = replace(pre,r"\n+$"=>"")
     ## date check
     docre = rsplit(doc,"%rev:";limit=2)
     if (length(docre) == 1)
@@ -105,12 +109,20 @@ function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
         doc = docre[1]
         docdc = DateTime(match(Regex(regtextag*"(?<=\n)?"),docre[2]).match)
     end
-    (data ≠ nothing) && checkmerge(docdc,data,title,author,date,doc) &&
-        throw(error("VerTeX unable to proceed due to merge failure"))
+    out = deepcopy(data)
+    if (data ≠ nothing)
+        cmv = checkmerge(docdc,data,title,author,date,doc)
+        if cmv == 0
+            throw(error("VerTeX unable to proceed due to merge failure"))
+        elseif cmv < 2
+            doc = preload(data,true,false)
+            author = data["author"]
+            date = data["date"]
+            title = data["title"]
+            pre = data["pre"]
+        end
+    end
     ## deconstruct VerTeX
-    prereg = "%vtx:"*regtextag*"\n?"
-    occursin(Regex(prereg),pre) && (pre = match(Regex("(?:"*prereg*")\\X+"),pre).match)
-    pre = replace(pre,r"\n+$"=>"")
     cp = split(doc,r"%extend:((true)|(false))\n?";limit=2)
     choice = match(r"(?<=%extend:)((true)|(false))(?=\n)?",doc)
     extend = choice ≠ nothing ? Meta.parse(choice.match) : true
@@ -133,8 +145,8 @@ function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
     doc = join(chomp(doc))
     if |(([author,date,title] .== unk)...)
         @info "Missing VerTeX metadata for $uid"
-        println(disp ? data["tex"] : doc)
-        println("%rev:",disp ? data["revised"] : tim)
+        println(disp ? (data ≠ nothing ? data["tex"] : doc) : doc)
+        println("%rev:",disp ? (data ≠ nothing ? data["revised"] : tim) : tim)
         print("title: ")
         title == unk ? (title = readline()) : println(title)
         print("author: ")
@@ -142,7 +154,6 @@ function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
         print("date: ")
         date == unk ? (date = readline()) : println(date)
     end
-    out = deepcopy(data)
     if out == nothing
         out = Dict(
             "editor" => AUTHOR,
@@ -171,7 +182,7 @@ function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
     ## parse additional vertices
     extra = []
     comments = []
-    haskey(data,"save") && (sav = data["save"]) #push!(sav,data["save"])
+    (data ≠ nothing) && haskey(data,"save") && (sav = data["save"]) #push!(sav,data["save"])
     if !compact
         while occursin(Regex(prereg),remdoc)
             ms = join.(collect((m.match for m = eachmatch(Regex(prereg),remdoc))))[1]
@@ -308,7 +319,7 @@ function updaterefby!(out,v;remove=false,cat::String="refby")
     return update
 end
 
-function preload(data::Dict,extend::Bool)
+function preload(data::Dict,extend::Bool,rev::Bool=true)
     doc = tomlocate("tex",data)*"\n"
     if extend && haskey(data,"comments") && length(data["comments"]) > 0
         shift = 0
@@ -341,7 +352,7 @@ function preload(data::Dict,extend::Bool)
             end
         end
     end
-    return "$doc%rev:$(data["revised"])"
+    return rev ? "$doc%rev:$(data["revised"])" : join(chomp(doc))
 end
 
 function dict2tex(data::Dict)
