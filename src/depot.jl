@@ -24,6 +24,7 @@ function save(dat::Dict,path::String;warn=true)
     repo = out["depot"]
     depos = getdepot()
     !haskey(depos,repo) && (@warn "did not save, $repo depot not found"; return dat)
+    data = nothing
     try
         data = load(path,repo)
         data ≠ nothing && checkmerge(dat["revised"],data,dat["title"],dat["author"],dat["date"],dat["tex"],"Save/Overwrite?") &&
@@ -90,6 +91,12 @@ function save(dat::Dict,path::String;warn=true)
     if haskey(out,"edit")
         setval!(out,"revised",out["edit"])
         pop!(out,"edit")
+    end
+    if data ≠ nothing
+        haskey(data,"revised") && pop!(data,"revised")
+        compare = deepcopy(out)
+        haskey(compare,"revised") && pop!(compare,"revised")
+        data == compare && (return out)
     end
     open(way, "w") do f
         write(f, dict2toml(out))

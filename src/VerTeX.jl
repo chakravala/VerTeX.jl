@@ -82,7 +82,7 @@ end
 
 checkmerge(a::String,data) = checkmerge(DateTime(a),data)
 
-function tex2dict(tex::String,data=nothing,disp=false)
+function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
     tim = Dates.unix2datetime(time())
     uid = UUIDs.uuid1()
     pd = String.(split(split(tex,"\n\\end{document}")[1],"\n\\begin{document}\n"))
@@ -105,7 +105,7 @@ function tex2dict(tex::String,data=nothing,disp=false)
         doc = docre[1]
         docdc = DateTime(match(Regex(regtextag*"(?<=\n)?"),docre[2]).match)
     end
-    (data ≠ nothing) && checkmerge(docdc,data,title,author,date,doc) && 
+    (data ≠ nothing) && checkmerge(docdc,data,title,author,date,doc) &&
         throw(error("VerTeX unable to proceed due to merge failure"))
     ## deconstruct VerTeX
     prereg = "%vtx:"*regtextag*"\n?"
@@ -120,7 +120,11 @@ function tex2dict(tex::String,data=nothing,disp=false)
         doc = cp[1]
     elseif choice ≠ nothing
         remdoc = "$(cp[2])\n"
-        doc = cp[1]
+        if occursin(r"%vtx:",cp[1])
+            doc = split(cp[1],r"%vtx:")[1]
+        else
+            doc = cp[1]
+        end
     else
         remdoc = "$doc\n"
         doc = split(doc,Regex(prereg);limit=2)[1]
@@ -167,6 +171,7 @@ function tex2dict(tex::String,data=nothing,disp=false)
     ## parse additional vertices
     extra = []
     comments = []
+    haskey(data,"save") && (sav = data["save"]) #push!(sav,data["save"])
     if !compact
         while occursin(Regex(prereg),remdoc)
             ms = join.(collect((m.match for m = eachmatch(Regex(prereg),remdoc))))[1]
@@ -181,18 +186,31 @@ function tex2dict(tex::String,data=nothing,disp=false)
             ods = nothing
             add2q = true
             try
-                ods = load(file,depo)
-                add2q = DateTime(ods["revised"]) == dc && ods["tex"] ≠ chomp(join(re[1]))
+                for s ∈ sav
+                    if haskey(s,"depot") && haskey(s,"dir") &&
+                            s["depot"] == depo && s["dir"] == file
+                        ods = s
+                        break
+                    end
+                end
+                ods == nothing && (ods = load(file,depo))
+                add2q = DateTime(ods["revised"]) == dc && ods["tex"] ≠ join(chomp(re[1]))
                 # check date and compare if opened
                 # terminal menu if date is not a mach
             catch
             end
-            ds = tex2dict(pre*"\n\\begin{document}\n"*sp[2]*"\n\\end{document}",ods,!add2q)
+            ds = tex2dict(pre*"\n\\begin{document}\n"*sp[2]*"\n\\end{document}",ods,!add2q,sav)
             push!(extra,repr(!Meta.parse(ds["compact"])))
             addval!(out,"show",ds["uuid"])
             addkey!(out,"ids",ds["uuid"],[ds["uuid"], depo, file])
             # add to save queue, for when actual save happens
-            add2q && addval!(out,"save",ds)
+            !haskey(ds,"dir") && setval!(ds,"dir",file)
+            !haskey(ds,"depot") && setval!(ds,"depot",depo)
+            ins = 0
+            haskey(out,"save") && for k ∈ 1:length(out["save"])
+                out["save"][k]["uuid"] == ds["uuid"] && (ins = k; break)
+            end
+            add2q && (ins > 0 ? (out["save"][ins] = ds) : addval!(out,"save",ds))
             remdoc = join(sp[3])
         end
         push!(comments,join(chomp(remdoc)))
@@ -291,12 +309,15 @@ function updaterefby!(out,v;remove=false,cat::String="refby")
 end
 
 function preload(data::Dict,extend::Bool)
-    doc = tomlocate("tex",data)
+    doc = tomlocate("tex",data)*"\n"
     if extend && haskey(data,"comments") && length(data["comments"]) > 0
         shift = 0
         ls = haskey(data,"show") ? length(data["show"]) : 0
         if length(data["comments"]) ≠ ls
-            doc *= "\n%extend:true\n$(data["comments"][1])"
+            if data["comments"][1] ≠ ""
+                doc *= "%extend:true\n$(data["comments"][1])\n"
+            else
+            end
             shift += 1
         end
         if ls > 0
@@ -305,17 +326,22 @@ function preload(data::Dict,extend::Bool)
                 d = data["ids"][key]
                 ta = ""
                 try
-                    ta = preload(load(d[3],d[2]),parse(data["extend"][k]))
+                    da = nothing
+                    haskey(data,"save") && for s ∈ data["save"]
+                        s["uuid"] == d[1] && (da = s; break)
+                    end
+                    da == nothing && (da = load(d[3],d[2]))
+                    ta = preload(da,Meta.parse(data["extend"][k]))
                 catch
                     @warn "could not load $(d[3]) from $(d[2])"
                 end
                 dep = data["depot"] ≠ "julia" ? "$(data["depot"]):~:" : ""
-                vtx = "\n%vtx:$dep$(d[3])\n"
-                doc *= join([vtx,ta,vtx,data["comments"][k+shift]])
+                vtx = "%vtx:$dep$(d[3])\n"
+                doc *= join([vtx,ta,"\n",vtx,data["comments"][k+shift]])
             end
         end
     end
-    return "$doc\n%rev:$(data["revised"])"
+    return "$doc%rev:$(data["revised"])"
 end
 
 function dict2tex(data::Dict)
