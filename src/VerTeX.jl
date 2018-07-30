@@ -166,8 +166,7 @@ function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
             "revised" => "$tim",
             "uuid" => "$uid",
             "version" => ["VerTeX", "v\"0.1.0\""],
-            "ids" => Dict(),
-            "compact" => "$compact") #twins, show, showby
+            "compact" => "$compact") #twins
     else
         setval!(out,"editor",AUTHOR)
         setval!(out,"author",author)
@@ -177,12 +176,13 @@ function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
         setval!(out,"title",title)
         setval!(out,"edit","$tim")
         setval!(out,"compact","$compact")
-        !haskey(out,"ids") && push!(out,"ids"=>Dict())
     end
     ## parse additional vertices
     extra = []
     comments = []
     (data ≠ nothing) && haskey(data,"save") && (sav = data["save"]) #push!(sav,data["save"])
+    haskey(out,"show") && pop!(out,"show")
+    haskey(out,"comments") && pop!(out,"comments")
     if !compact
         while occursin(Regex(prereg),remdoc)
             ms = join.(collect((m.match for m = eachmatch(Regex(prereg),remdoc))))[1]
@@ -212,8 +212,8 @@ function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
             end
             ds = tex2dict(pre*"\n\\begin{document}\n"*sp[2]*"\n\\end{document}",ods,!add2q,sav)
             push!(extra,repr(!Meta.parse(ds["compact"])))
-            addval!(out,"show",ds["uuid"])
-            addkey!(out,"ids",ds["uuid"],[ds["uuid"], depo, file])
+            addval!(out,"show",[ds["uuid"],depo,file])
+            #addkey!(out,"ids",ds["uuid"],[ds["uuid"], depo, file])
             # add to save queue, for when actual save happens
             !haskey(ds,"dir") && setval!(ds,"dir",file)
             !haskey(ds,"depot") && setval!(ds,"depot",depo)
@@ -236,6 +236,7 @@ function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
     ## double check reference nodes
     bins = ["ref","used","deps"]
     items = [bins...,"cite","label","lbl"] # "refby", "citeby", "depsby"
+    # update referral lists
     for it ∈ items
         temp = it == "lbl" ? lbllocate(doc) : texlocate(Symbol(it),doc)
         item = it == "lbl" ? "label" : it
@@ -245,78 +246,7 @@ function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
             haskey(out,item) && pop!(out,item)
         end
     end
-    for cat ∈ bins
-        haskey(out,cat) && for ref in out[cat]
-            if haskey(out["ids"],ref)
-                !checkuuid(out["ids"][ref]...,ref) && updateref!(out,ref)
-            else
-                updateref!(out,ref)
-            end
-        end
-    end
-    haskey(out,"label") && for lbl in out["label"]
-        for cat ∈ [:ref,:deps,:use]
-            result = searchvtx([cat],[lbl])
-            for v ∈ result
-                updaterefby!(out,v;cat="$(cat)by")
-            end
-        end
-    end
-    for cat ∈ ([bins...,"show"] .* "by")
-        haskey(out,cat) && isempty(out[cat]) && pop!(out,cat)
-    end
-    for key in keys(out["ids"])
-        found = false
-        for item ∈ ["cite","show",bins...]
-            haskey(out,item) && (key ∈ out[item]) && (found = true)
-        end
-        (key == out["author"]) && (found = true)
-        !found && pop!(out["ids"],key)
-    end
     return out::Dict
-end
-
-function checkuuid(uuid::String,depot::String,dir::String,label::String)
-    repodat = getdepot()
-    !haskey(repodat,depot) && (return false)
-    !isfile(joinpath(checkhome(repodat[depot]),dir)) && (return false)
-    dat = load(dir,depot)
-    uuid ≠ dat["uuid"] && (return false)
-    return haskey(dat,"label") && (label in dat["label"])
-end
-
-function updateref!(out,ref,cat::Symbol=:label)
-    result = searchvtx([cat],[ref])
-    length(result) ≠ 1 && (@warn "could not find label $ref"; return out)
-    give = ref => [result[1]["uuid"],result[1]["depot"],result[1]["dir"]]
-    haskey(out["ids"],ref) ? (out["ids"][ref] = give) : push!(out["ids"],give)
-    return out
-end
-
-function updaterefby!(out,v;remove=false,cat::String="refby")
-    n = [v["uuid"],v["depot"],v["dir"]]
-    update = true
-    if haskey(out,cat)
-        amt = length(out[cat])
-        k = 1
-        while k ≤ amt
-            if out[cat][k][1] == n[1]
-                if ((out[cat][k][2] ≠ n[2] | out[cat][k][3] ≠ n[3]) | remove)
-                    deleteat!(out[cat],k)
-                    amt -= 1
-                else
-                    update = false
-                end
-            else
-                k += 1
-            end
-        end
-        !remove && update && push!(out[cat],n)
-        isempty(out[cat]) && pop!(out,cat)
-    else
-        !remove && update && push!(out,"refby"=>[n])
-    end
-    return update
 end
 
 function preload(data::Dict,extend::Bool,rev::Bool=true)
@@ -334,20 +264,19 @@ function preload(data::Dict,extend::Bool,rev::Bool=true)
         if ls > 0
             for k ∈ 1:ls
                 key = data["show"][k]
-                d = data["ids"][key]
                 ta = ""
                 try
                     da = nothing
                     haskey(data,"save") && for s ∈ data["save"]
-                        s["uuid"] == d[1] && (da = s; break)
+                        s["uuid"] == key[1] && (da = s; break)
                     end
-                    da == nothing && (da = load(d[3],d[2]))
+                    da == nothing && (da = load(key[3],key[2]))
                     ta = preload(da,Meta.parse(data["extend"][k]))
                 catch
-                    @warn "could not load $(d[3]) from $(d[2])"
+                    @warn "could not load $(key[3]) from $(key[2])"
                 end
                 dep = data["depot"] ≠ "julia" ? "$(data["depot"]):~:" : ""
-                vtx = "%vtx:$dep$(d[3])\n"
+                vtx = "%vtx:$dep$(key[3])\n"
                 doc *= join([vtx,ta,"\n",vtx,data["comments"][k+shift]])
             end
         end
@@ -382,5 +311,13 @@ tex2toml(tex::String) = dict2toml(tex2dict(tex))
 
 include("depot.jl")
 include("search.jl")
+
+function __init__()
+    # load manifest and dictionary at ini
+    readmanifest()
+    readdictionary()
+    # save manifest and dictionary at end
+    #atexit(() -> (writemanifest(); writedictionary()))
+end
 
 end # module

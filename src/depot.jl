@@ -4,6 +4,18 @@
 
 repos = Dict("julia"=>"~/.julia/vtx/")
 
+manifest = Dict("julia"=>Dict())
+dictionary = Dict()
+
+function lookup(ref)
+    s = split(ref,':')
+    if length(s) == 1
+        return haskey(dictionary,ref) ? dictionary[ref] : [nothing]
+    else
+        return haskey(dictionary,ref) ? dictionary[ref] : [nothing]
+    end
+end
+
 function getdepot()
     repodat = Dict()
     try
@@ -16,6 +28,118 @@ function getdepot()
         push!(repodat,key=>repos[key])
     end
     return repodat
+end
+
+function updateref!(data)
+    depot = haskey(data,"depot") ? data["depot"] : "julia"
+    !haskey(manifest[depot],data["uuid"]) && push!(manifest[depot],data["uuid"]=>Dict())
+    setval!(manifest[depot][data["uuid"]],"dir",data["dir"])
+    # update manifest and dictionary
+    for cat in ["label","cite"]
+        if haskey(data,cat)
+            setval!(manifest[depot][data["uuid"]],cat,data[cat])
+            cat ≠ "cite" && for ref in data[cat]
+                if cat == "label"
+                    give = [data["uuid"],haskey(data,"depot") ? data["depot"] : "julia",data["dir"]]
+                    haskey(dictionary,ref) ? (dictionary[ref] = give) : push!(dictionary,ref=>give)
+                end
+            end
+        end
+    end
+    for item in ["ref","used","deps","show"]
+        if haskey(data,item)
+            setval!(manifest[depot][data["uuid"]],item,data[item])
+        else
+            haskey(manifest[depot][data["uuid"]],item) && pop!(manifest[depot][data["uuid"]],item)
+        end
+    end
+    return nothing
+end
+
+function updaterefby!(depot,key)
+    for cat ∈ ["ref","used","deps","show"]
+        # identify cross-references
+        if haskey(manifest[depot][key],cat)
+            for ref in manifest[depot][key][cat]
+                if cat ≠ "show"
+                    if haskey(dictionary,ref)
+                        addval!(manifest[dictionary[ref][2]][dictionary[ref][1]],cat*"by",[key,depot,manifest[depot][key]["dir"]])
+                    end
+                else
+                    if haskey(dictionary,ref[1])
+                        addval!(manifest[ref[2]][ref[1]],cat*"by",[key,depot,manifest[depot][key]["dir"]])
+                    end
+                end
+            end
+        end
+        # remove surplus edges
+        if haskey(manifest[depot][key],cat*"by")
+            amt = length(manifest[depot][key][cat*"by"])
+            k = 1
+            while k ≤ amt
+                ref = manifest[depot][key][cat*"by"][k]
+                if haskey(manifest[ref[2]][ref[1]],cat) &&
+                        ref ∉ manifest[ref[2]][ref[1]][cat]
+                    deleteat!(manifest[depot][key][cat*"by"],k)
+                    amt -= 1
+                else
+                    k += 1
+                end
+            end
+            isempty(manifest[depot][key][cat*"by"]) && pop!(manifest[depot][key],cat*"by")
+        end
+    end
+    return nothing
+end
+
+function resolve(depot)
+    depos = getdepot()
+    if haskey(depos,depot)
+        # update manifest and dictionary
+        !haskey(manifest,depot) && push!(manifest,depot=>Dict())
+        for (root, dirs, files) in walkdir(checkhome(depos[depot]))
+            for dir in dirs
+                for file in readdir(joinpath(root,dir))
+                    data = nothing
+                    if endswith(file, ".vtx")
+                        data = TOML.parsefile(joinpath(root,dir,file))
+                        updateref!(data)
+                    end
+                end
+            end
+        end
+        # identify cross-references
+        for depot ∈ keys(manifest)
+            for key ∈ keys(manifest[depot])
+                updaterefby!(depot,key)
+            end
+        end
+    end
+end
+
+function resolve()
+    depos = getdepot()
+    # update manifest and dictionary
+    for depot in keys(depos)
+        !haskey(manifest,depot) && push!(manifest,depot=>Dict())
+        for (root, dirs, files) in walkdir(checkhome(depos[depot]))
+            for dir in dirs
+                for file in readdir(joinpath(root,dir))
+                    data = nothing
+                    if endswith(file, ".vtx")
+                        data = TOML.parsefile(joinpath(root,dir,file))
+                        updateref!(data)
+                    end
+                end
+            end
+        end
+    end
+    # identify cross-references
+    for depot ∈ keys(manifest)
+        for key ∈ keys(manifest[depot])
+            updaterefby!(depot,key)
+        end
+    end
 end
 
 function save(dat::Dict,path::String;warn=true)
@@ -56,45 +180,8 @@ function save(dat::Dict,path::String;warn=true)
         pop!(out,"save")
     end
     haskey(out,"compact") && pop!(out,"compact")
-    for cat ∈ ["ref","deps","used","show"]
-        list = haskey(old,cat) ? copy(old[cat]) : String[]
-        if haskey(out,cat)
-            for ref ∈ out[cat]
-                if haskey(out,"ids") && haskey(out["ids"],ref)
-                    h = out["ids"][ref]
-                    if (h[2] ≠ repo) && (h[3] ≠ path)
-                        s = load(h[3],h[2])
-                        if updaterefby!(s,out;cat="$(cat)by")
-                            save(s,warn=false)
-                            infotxt *= "updated \\$cat{$ref} at $(h[3]) in $(h[2])\n"
-                        end
-                    end
-                end
-                amt = length(list)
-                k = 1
-                while k ≤ amt
-                    if list[k] == ref
-                        deleteat!(list,k)
-                        amt -= 1
-                    else
-                        k += 1
-                    end
-                end
-            end
-        end
-        for ref ∈ list
-            if haskey(old,"ids") && haskey(old["ids"],ref)
-                h = old["ids"][ref]
-                if (h[2] ≠ repo) && (h[3] ≠ path)
-                    s = load(h[3],h[2])
-                    if updaterefby!(s,out;remove=true,cat="$(cat)by")
-                        save(s,warn=false)
-                        infotxt *= "removed \\$cat{$ref} at $(h[3]) in $(h[2])\n"
-                    end
-                end
-            end
-        end
-    end
+    updateref!(out)
+    updaterefby!(repo,out["uuid"])
     if haskey(out,"edit")
         setval!(out,"revised",out["edit"])
         pop!(out,"edit")
@@ -171,4 +258,70 @@ end
 
 function update(data::Dict)
     save(tex2dict(readtex(loadpath(data)),data))
+end
+
+function writemanifest(depot)
+    depos = getdepot()
+    if haskey(manifest,depot) && haskey(depos,depot)
+        open(joinpath(checkhome(depos[depot]),"Manifest.toml"), "w") do f
+            write(f, dict2toml(manifest[depot]))
+        end
+    else
+        @warn "no $depot manifest found in memory"
+    end
+    return nothing
+end
+
+function writemanifest()
+    for key ∈ keys(manifest)
+        writemanifest(key)
+    end
+    return nothing
+end
+
+function writedictionary()
+    depos = getdepot()
+    open(joinpath(checkhome(depos["julia"]),"Dictionary.toml"), "w") do f
+        write(f, dict2toml(dictionary))
+    end
+    return nothing
+end
+
+function readmanifest(depot)
+    depos = getdepot()
+    if haskey(depos,depot)
+        dat = ""
+        try
+            open(joinpath(checkhome(depos[depot]),"Manifest.toml"), "r") do f
+                dat = read(f, String)
+            end
+            setval!(manifest,depot,TOML.parse(dat))
+        catch
+        end
+    else
+        @warn "did not load, $depot depot not found"
+    end
+    return nothing
+end
+
+function readmanifest()
+    depos = getdepot()
+    for depot ∈ keys(depos)
+        readmanifest(depot)
+    end
+    return nothing
+end
+
+function readdictionary()
+    depos = getdepot()
+    dat = ""
+    try
+        open(joinpath(checkhome(depos["julia"]),"Dictionary.toml"), "r") do f
+            dat = read(f, String)
+        end
+        global dictionary
+        dictionary = TOML.parse(dat)
+    catch
+    end
+    return nothing
 end
