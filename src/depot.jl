@@ -1,5 +1,5 @@
 
-#   This file is part of JuliaTeX.jl. It is licensed under the MIT license
+#   This file is part of VerTeX.jl. It is licensed under the MIT license
 #   Copyright (C) 2018 Michael Reed
 
 repos = Dict("julia"=>"~/.julia/vtx/")
@@ -30,6 +30,25 @@ function getdepot()
     end
     return repodat
 end
+
+function regdepot(depot,location)
+    dep = getdepot()
+    if haskey(dep,depot)
+        dep[depot] = location
+    else
+        push!(dep,depot=>location)
+    end
+    try
+        open(joinpath(homedir(),".julia/vtx/Depot.toml"), "w") do f
+            write(f, dict2toml(dep))
+        end
+    catch
+    end
+end
+
+regpkg(depot,location) = regdepot(string(depot),joinpath(dirname(location),"vtx"))
+
+regcmd = :(println(joinpath(dirname(@__DIR__),"vtx")))
 
 function updateref!(data)
     depot = haskey(data,"depot") ? data["depot"] : "julia"

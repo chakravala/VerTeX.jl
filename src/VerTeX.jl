@@ -5,12 +5,12 @@ module VerTeX
 #   Copyright (C) 2018 Michael Reed
 
 export dict2toml, tex2dict, tex2toml, dict2tex, toml2tex, toml2dict
+export zathura, latexmk, pdf, texedit
 
-using Pkg, UUIDs, Dates, TerminalMenus
-using Pkg.TOML, Pkg.Pkg2
+using Pkg, UUIDs, Dates, REPL
+using Pkg.TOML, Pkg.Pkg2, REPL.TerminalMenus
 
-AUTHOR = "anonymous"
-try global AUTHOR = ENV["AUTHOR"] finally end
+global AUTHOR = "anonymous"
 
 checkhome(path::String) = occursin(r"^~/",path) ? joinpath(homedir(),path[3:end]) : path
 
@@ -23,8 +23,14 @@ function preamble(path::String="default.tex",repo::String="julia")
     depos = getdepot()
     !haskey(depos,repo) && throw(error("did not load preamble, $repo depot not found"))
     load = ""
-    open(joinpath(checkhome(depos[repo]),path), "r") do f
-        load = read(f,String)
+    try
+        open(joinpath(checkhome(depos[repo]),path), "r") do f
+            load = read(f,String)
+        end
+    catch
+        open(joinpath("..","vtx",path), "r") do f
+            load = read(f,String)
+        end
     end
     dep = repo ≠ "julia" ? "$repo:~:" : ""
     return load*"%vtx:$dep$(relhome(path))"
@@ -235,11 +241,10 @@ function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
     end
     ## double check reference nodes
     bins = ["ref","used","deps"]
-    items = [bins...,"cite","label","lbl"] # "refby", "citeby", "depsby"
+    items = [bins...,"cite","label"] # "refby", "citeby", "depsby"
     # update referral lists
-    for it ∈ items
-        temp = it == "lbl" ? lbllocate(doc) : texlocate(Symbol(it),doc)
-        item = it == "lbl" ? "label" : it
+    for item ∈ items
+        temp = [(item == "label" ? lbllocate(doc) : []); texlocate(Symbol(item),doc)]
         if temp ≠ ["none"]
             setval!(out,item,temp)
         else
@@ -290,7 +295,7 @@ function dict2tex(data::Dict)
     author = tomlocate("author",data,unk)
     date = tomlocate("date",data,unk)
     title = tomlocate("title",data,unk)
-    dep = data["depot"] ≠ "julia" ? "$(data["depot"]):~:" : ""
+    dep = (haskey(data,"depot") && (data["depot"] ≠ "julia")) ? "$(data["depot"]):~:" : ""
     reg = "^%vtx:"*regtextag
     if occursin(Regex(reg*"\n?"),pre)
         prereg = "(?<=%vtx:)"*regtextag*"(?<=\n)?"
@@ -311,13 +316,25 @@ tex2toml(tex::String) = dict2toml(tex2dict(tex))
 
 include("depot.jl")
 include("search.jl")
+include("repl.jl")
 
 function __init__()
+    haskey(ENV,"AUTHOR") && (global AUTHOR = ENV["AUTHOR"])
     # load manifest and dictionary at ini
     readmanifest()
     readdictionary()
     # save manifest and dictionary at end
     #atexit(() -> (writemanifest(); writedictionary()))
+    if isdefined(Base, :active_repl)
+        REPLMode.repl_init(Base.active_repl)
+    else
+        atreplinit() do repl
+            if isinteractive() && repl isa REPL.LineEditREPL
+                isdefined(repl, :interface) || (repl.interface = REPL.setup_interface(repl))
+                REPLMode.repl_init(repl)
+            end
+        end
+    end
 end
 
 end # module
