@@ -1,6 +1,6 @@
 # VerTeX.jl
 
-*Typeset scattered graph data rewriter based on tagged VerTeX nodes*
+*Typeset scattered graph data rewriter based on LaTeX nodes*
 
 [![Build Status](https://travis-ci.org/chakravala/VerTeX.jl.svg?branch=master)](https://travis-ci.org/chakravala/VerTeX.jl)
 [![Build status](https://ci.appveyor.com/api/projects/status/8poc90nqimq5903s/branch/master?svg=true)](https://ci.appveyor.com/project/chakravala/vertex-jl/branch/master)

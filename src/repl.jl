@@ -12,6 +12,8 @@ import REPL: LineEdit, REPLCompletions
 import Pkg: Types.casesensitive_isdir
 using Pkg.Types, Pkg.Display, Pkg.Operations
 
+vtxerror(msg::String...) = throw(PkgError(join(msg)))
+
 #########################
 # Specification Structs #
 #########################
@@ -26,7 +28,7 @@ const OptionDeclaration = Vector{Pair{Symbol,Any}}
 #----------#
 # Commands #
 #----------#
-@enum(CommandKind, CMD_VIM)
+@enum(CommandKind, CMD_HELP, CMD_VIM, CMD_PDF, CMD_STATUS, CMD_DICT)
 #=@enum(CommandKind, CMD_HELP, CMD_RM, CMD_ADD, CMD_DEVELOP, CMD_UP,
                    CMD_STATUS, CMD_TEST, CMD_GC, CMD_BUILD, CMD_PIN,
                    CMD_FREE, CMD_GENERATE, CMD_RESOLVE, CMD_PRECOMPILE,
@@ -61,7 +63,7 @@ function do_cmd!(command::Command, repl)
     context = Dict{Symbol,Any}(:preview => command.preview)
 
     # REPL specific commands
-    #command.spec.kind == CMD_HELP && return Base.invokelatest(do_help!, command, repl)
+    command.spec.kind == CMD_HELP && return Base.invokelatest(do_help!, command, repl)
 
     # API commands
     # TODO is invokelatest still needed?
@@ -80,11 +82,7 @@ function parse_command(words::Vector{QString})
     return statement.spec === nothing ?  statement.super : statement.spec
 end
 
-function do_vim!(a,b)
-    texedit(a[1].raw)
-end
-
-#=function do_help!(command::Command, repl::REPL.AbstractREPL)
+function do_help!(command::Command, repl::REPL.AbstractREPL)
     disp = REPL.REPLDisplay(repl)
     if isempty(command.arguments)
         Base.display(disp, help)
@@ -106,7 +104,15 @@ end
     end
     !isempty(command.arguments) && @warn "More than one command specified, only rendering help for first"
     Base.display(disp, help_md)
-end=#
+end
+
+do_vim!(a,b) = texedit(a[1].raw)
+
+do_pdf!(a,b) = pdf(load([x.raw for x ∈ a]...))
+
+do_status!(a,b) = display_manifest([x.raw for x ∈ a]...)
+
+do_dict!(a,b) = display_dictionary()
 
 ######################
 # REPL mode creation #
@@ -285,6 +291,6 @@ Multiple commands can be given on the same line by interleaving a `;` between th
     return help
 end
 
-#const help = gen_help()
+const help = gen_help()
 
 end #module

@@ -38,6 +38,14 @@ function complete_remote_package(s, i1, i2)
     return cmp, i1:i2, !isempty(cmp)
 end=#
 
+function complete_help(options, partial)
+    names = String[]
+    for cmds in values(super_specs)
+         append!(names, [spec.canonical_name for spec in values(cmds)])
+    end
+    return sort!(unique!(append!(names, collect(keys(super_specs)))))
+end
+
 function complete_argument(to_complete, i1, i2, lastcommand, project_opt
                            )::Tuple{Vector{String},UnitRange{Int},Bool}
     if lastcommand == CMD_HELP
