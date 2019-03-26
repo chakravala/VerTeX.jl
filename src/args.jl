@@ -4,6 +4,8 @@
 
 import ..load, ..save, ..checkmerge, ..readtex, ..writetex, ..tex2dict, ..save, ..article, ..manifest, ..readmanifest, ..getdepot, ..readdictionary, ..dictionary
 
+using TerminalMenus
+
 export zathura, latexmk, pdf, texedit
 
 zathura(f::String,o=stdout) = run(`zathura $f`,(devnull,o,stderr),wait=false)
@@ -61,7 +63,9 @@ function texedit(file::String="/tmp/doc.tex")
     try
         v = load(file)
     catch
-        v = save(tex2dict(article(str)),file)
+        r = request("$file not found, create?",RadioMenu(["cancel","save"]))
+        r == 1 && (return nothing)
+        v = save(tex2dict(article("")),file)
     end
     return texedit(v,file)
 end
