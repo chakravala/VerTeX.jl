@@ -7,7 +7,7 @@ module VerTeX
 export dict2toml, tex2dict, tex2toml, dict2tex, toml2tex, toml2dict
 export zathura, latexmk, pdf, texedit
 
-using Pkg, UUIDs, Dates, REPL
+using Pkg, UUIDs, Dates, REPL, Requires
 using Pkg.TOML, Pkg.Pkg2, REPL.TerminalMenus
 
 global AUTHOR = "anonymous"
@@ -333,6 +333,32 @@ function __init__()
                 isdefined(repl, :interface) || (repl.interface = REPL.setup_interface(repl))
                 REPLMode.repl_init(repl)
             end
+        end
+    end
+    @require LightGraphs="093fc24a-ae57-5d10-9952-331d41423f4d" begin
+        using LightGraphs
+        function makegraph(manifest=manifest,dictionary=dictionary,index=collect(keys(dictionary)))
+            readmanifest()
+            readdictionary()
+            g = LightGraphs.SimpleDiGraph(length(index))
+            for i ∈ 1:length(index)
+                key = collect(values(dictionary[index[i]]))[1]
+                more = manifest[key[2]][key[1]]
+                if haskey(more,"deps")
+                    for dep ∈ more["deps"]
+                        f = findall(index .== split(dep,':')[1])
+                        !isempty(f) && LightGraphs.add_edge!(g,f[1],i)
+                    end
+                end
+            end
+            return g
+        end
+    end
+    @require GraphPlot="a2cc645c-3eea-5389-862e-a155d0052231" begin
+        using LightGraphs, GraphPlot, Compose, Cairo
+        function drawpng(name="vtx-data.png",manifest=manifest,dictionary=dictionary,index=collect(keys(dictionary)))
+            p = gplot(makegraph(manifest,dictionary,index),nodelabel=index,layout=circular_layout)
+            eval(:(draw(PNG($name, $(Expr(:call,:*,32,:cm)), $(Expr(:call,:*,32,:cm))), $p)))
         end
     end
 end

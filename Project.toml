@@ -3,9 +3,11 @@ uuid = "cc48e778-429c-5593-b60f-2bcf41d5649c"
 
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+LightGraphs = "093fc24a-ae57-5d10-9952-331d41423f4d"
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
+Requires = "ae029012-a4dd-5104-9daa-d747884805df"
 TerminalMenus = "dc548174-15c3-5faf-af27-7997cfbde655"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
@@ -14,4 +16,3 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
-
