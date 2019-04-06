@@ -28,7 +28,8 @@ const OptionDeclaration = Vector{Pair{Symbol,Any}}
 #----------#
 # Commands #
 #----------#
-@enum(CommandKind, CMD_HELP, CMD_VIM, CMD_PDF, CMD_STATUS, CMD_DICT)
+@enum(CommandKind, CMD_HELP, CMD_VIM, CMD_PDF, CMD_STATUS, CMD_DICT,
+                 CMD_RANGER, CMD_PREVIEW, CMD_SEARCH)
 #=@enum(CommandKind, CMD_HELP, CMD_RM, CMD_ADD, CMD_DEVELOP, CMD_UP,
                    CMD_STATUS, CMD_TEST, CMD_GC, CMD_BUILD, CMD_PIN,
                    CMD_FREE, CMD_GENERATE, CMD_RESOLVE, CMD_PRECOMPILE,
@@ -106,13 +107,30 @@ function do_help!(command::Command, repl::REPL.AbstractREPL)
     Base.display(disp, help_md)
 end
 
-do_vim!(a,b) = texedit(a[1].raw)
+raw(a) = [x.raw for x ∈ a]
 
-do_pdf!(a,b) = pdf(load([x.raw for x ∈ a]...))
+do_vim!(a,b) = texedit(raw(a)...)
 
-do_status!(a,b) = display_manifest([x.raw for x ∈ a]...)
+do_pdf!(a,b) = pdf(load(raw(a)...))
+
+do_status!(a,b) = display_manifest(raw(a)...)
 
 do_dict!(a,b) = display_dictionary()
+
+function do_ranger!(a,b)
+    dir = joinpath(homedir(),".julia","config","vtx")
+    repo = expanduser(getdepot()[length(a)<1 ? "julia" : a[1].raw])
+    run(`ranger $repo --choosefile=$dir`)
+    try
+        texedit(read(`cat $dir`,String))
+        run(`rm $dir`)
+    catch
+    end
+end
+
+do_preview!(a,b) = preview_vertex(load(raw(a)...))
+
+do_search!(a,b) = preview_vertex.(searchvtx([:search],raw(a)))
 
 ######################
 # REPL mode creation #
@@ -278,10 +296,10 @@ end
 
 function gen_help()
     help = md"""
-**Welcome to the Pkg REPL-mode**. To return to the `julia>` prompt, either press
+**Welcome to the VerTeX REPL-mode**. To return to the `julia>` prompt, either press
 backspace when the input line is empty or press Ctrl+C.
 **Synopsis**
-    pkg> cmd [opts] [args]
+    vtx> cmd [opts] [args]
 Multiple commands can be given on the same line by interleaving a `;` between the commands.
 **Commands**
 """

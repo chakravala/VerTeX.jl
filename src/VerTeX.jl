@@ -70,6 +70,10 @@ setval!(d::Dict,key,val) = haskey(d,key) ? (d[key] = val) : push!(d,key=>val)
 addval!(d::Dict,key,val) = haskey(d,key) ? (val ∉ d[key] && push!(d[key],val)) : push!(d,key=>Any[val])
 addkey!(d::Dict,key,val,pair) = !haskey(d[key],val) && push!(d[key],val=>pair)
 
+
+preview_vertex(title,author,date,doc) = @info "$title by $author ($date)\n$doc"
+preview_vertex(data::Dict) = preview_vertex(data["title"],data["author"],data["date"],data["tex"])
+
 function checkmerge(a::DateTime,data,title,author,date,doc,msg="Merge conflict detected, proceed?")
     val = 2
     errors = ["",""]
@@ -79,9 +83,9 @@ function checkmerge(a::DateTime,data,title,author,date,doc,msg="Merge conflict d
     end
     if errors ≠ ["",""]
         @warn "$(errors[1])"
-        @info "$(data["title"]) by $(data["author"]) ($(data["date"]))\n$(data["tex"])"
+        preview_vertex(data)
         @warn "$(errors[2])"
-        @info "$title by $author ($date)\n$doc"
+        preview_vertex(title,author,date,doc)
         val = request(msg,RadioMenu(["skip / discard","merge / replace"]))
     end
     return val

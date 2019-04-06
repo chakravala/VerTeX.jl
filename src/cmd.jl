@@ -8,7 +8,7 @@ command_declarations = [
     :name => "vim",
     :short_name => "vi",
     :handler => do_vim!,
-    :arg_count => 1 => 1,
+    :arg_count => 1 => 2,
     :arg_parser => identity,
     :description => "edit with vim",
     :help => md"""
@@ -73,6 +73,44 @@ display manifest
     dict
 
 display dictionary
+    """
+],[ :kind => CMD_RANGER,
+    :name => "ranger",
+    :short_name => "ra",
+    :handler => do_ranger!,
+    :arg_count => 0 => 1,
+    :arg_parser => identity,
+    :description => "select file to edit from repo",
+    :help => md"""
+
+    ra [repot]
+
+select file to edit from repo
+    """
+],[ :kind => CMD_PREVIEW,
+    :name => "preview",
+    :short_name => "pre",
+    :handler => do_preview!,
+    :arg_count => 1 => 2,
+    :arg_parser => identity,
+    :description => "select file to preview from repo",
+    :help => md"""
+
+    preview [path] [repo]
+
+select file to preview from repo
+    """
+],[ :kind => CMD_SEARCH,
+    :name => "search",
+    :handler => do_search!,
+    :arg_count => 1 => Inf,
+    :arg_parser => identity,
+    :description => "search",
+    :help => md"""
+
+    search query...
+
+search for results
     """
 ],
 ], #package
