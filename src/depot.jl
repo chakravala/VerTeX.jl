@@ -2,6 +2,15 @@
 #   This file is part of VerTeX.jl. It is licensed under the MIT license
 #   Copyright (C) 2018 Michael Reed
 
+export cdpkg, @cdpkg
+
+cdpkg(pkg) = cd(dirname(Base.find_package(string(pkg))))
+
+macro cdpkg(pkg)
+    cdpkg(pkg)
+    return nothing
+end
+
 repos = Dict("julia"=>"~/.julia/vtx/")
 
 manifest = Dict("julia"=>Dict())

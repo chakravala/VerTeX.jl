@@ -29,7 +29,7 @@ const OptionDeclaration = Vector{Pair{Symbol,Any}}
 # Commands #
 #----------#
 @enum(CommandKind, CMD_HELP, CMD_VIM, CMD_PDF, CMD_STATUS, CMD_DICT,
-                 CMD_RANGER, CMD_PREVIEW, CMD_SEARCH)
+                 CMD_RANGER, CMD_PREVIEW, CMD_SEARCH, CMD_CD, CMD_CDPKG)
 #=@enum(CommandKind, CMD_HELP, CMD_RM, CMD_ADD, CMD_DEVELOP, CMD_UP,
                    CMD_STATUS, CMD_TEST, CMD_GC, CMD_BUILD, CMD_PIN,
                    CMD_FREE, CMD_GENERATE, CMD_RESOLVE, CMD_PRECOMPILE,
@@ -131,6 +131,19 @@ end
 do_preview!(a,b) = preview_vertex(load(raw(a)...))
 
 do_search!(a,b) = preview_vertex.(searchvtx([:search],raw(a)))
+
+function do_cd!(a,b)
+    if length(a)<1
+        dir = joinpath(homedir(),".julia","config","cd")
+        run(`ranger $(pwd()) --choosedir=$dir`)
+        cd(read(`cat $dir`,String))
+    else
+        cd(joinpath(expanduser(getdepot()[a[1].raw])))
+    end
+    println(pwd())
+end
+
+do_cdpkg!(a,b) = (cdpkg(a[1].raw); println(pwd()))
 
 ######################
 # REPL mode creation #

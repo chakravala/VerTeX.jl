@@ -112,6 +112,30 @@ select file to preview from repo
 
 search for results
     """
+],[ :kind => CMD_CD,
+    :name => "cd",
+    :handler => do_cd!,
+    :arg_count => 0 => 1,
+    :arg_parser => identity,
+    :description => "change directory",
+    :help => md"""
+
+    cd [repo]
+
+change directory
+    """
+],[ :kind => CMD_CDPKG,
+    :name => "cdpkg",
+    :handler => do_cdpkg!,
+    :arg_count => 1 => 1,
+    :arg_parser => identity,
+    :description => "change directory to package source",
+    :help => md"""
+
+    cdpkg repo
+
+change directory to package source
+    """
 ],
 ], #package
 ] #command_declarations
