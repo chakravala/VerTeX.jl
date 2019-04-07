@@ -136,6 +136,18 @@ change directory
 
 change directory to package source
     """
+],[ :kind => CMD_GRAPH,
+    :name => "graph",
+    :handler => do_graph!,
+    :arg_count => 0 => 0,
+    :arg_parser => identity,
+    :description => "graph relational data",
+    :help => md"""
+
+    graph
+
+graph relational data
+    """
 ],
 ], #package
 ] #command_declarations

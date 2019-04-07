@@ -10,6 +10,8 @@ export zathura, latexmk, pdf, texedit
 using Pkg, UUIDs, Dates, REPL, Requires
 using Pkg.TOML, Pkg.Pkg2, REPL.TerminalMenus
 
+function drawgraph end
+
 global AUTHOR = "anonymous"
 
 checkhome(path::String) = occursin(r"^~/",path) ? joinpath(homedir(),path[3:end]) : path
@@ -360,9 +362,9 @@ function __init__()
     end
     @require GraphPlot="a2cc645c-3eea-5389-862e-a155d0052231" begin
         using LightGraphs, GraphPlot, Compose, Cairo
-        function drawpng(name="vtx-data.png",manifest=manifest,dictionary=dictionary,index=collect(keys(dictionary)))
+        function drawgraph(name="/tmp/vtx-data.pdf",manifest=manifest,dictionary=dictionary,index=collect(keys(dictionary)))
             p = gplot(makegraph(manifest,dictionary,index),nodelabel=index,layout=circular_layout)
-            eval(:(draw(PNG($name, $(Expr(:call,:*,32,:cm)), $(Expr(:call,:*,32,:cm))), $p)))
+            eval(:(draw(PDF($name, $(Expr(:call,:*,32,:cm)), $(Expr(:call,:*,32,:cm))), $p)))
         end
     end
 end

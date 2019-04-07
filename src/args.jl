@@ -2,7 +2,7 @@
 #   This file is part of VerTeX.jl. It is licensed under the MIT license
 #   Copyright (C) 2019 Michael Reed
 
-import ..load, ..save, ..checkmerge, ..readtex, ..writetex, ..tex2dict, ..save, ..article, ..manifest, ..readmanifest, ..getdepot, ..readdictionary, ..dictionary, ..preview_vertex, ..searchvtx, ..cdpkg
+import ..load, ..save, ..checkmerge, ..readtex, ..writetex, ..tex2dict, ..save, ..article, ..manifest, ..readmanifest, ..getdepot, ..readdictionary, ..dictionary, ..preview_vertex, ..searchvtx, ..cdpkg, ..drawgraph
 
 using TerminalMenus
 
