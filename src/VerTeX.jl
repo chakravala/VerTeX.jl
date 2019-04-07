@@ -328,7 +328,7 @@ function __init__()
     readmanifest()
     readdictionary()
     # save manifest and dictionary at end
-    #atexit(() -> (writemanifest(); writedictionary()))
+    atexit(() -> (writemanifest(); writedictionary()))
     if isdefined(Base, :active_repl)
         REPLMode.repl_init(Base.active_repl)
     else

@@ -30,8 +30,9 @@ pdf(data::Dict,o=stdout) = showpdf(writetex(data),o)
 
 function texedit(data::Dict,file::String="/tmp/doc.tex")
     haskey(data,"dir") && (file == "/tmp/doc.tex") && (file = data["dir"])
+    depot = haskey(data,"depot") ? data["depot"] : "julia"
     try
-        old = load(file,haskey(data,"depot") ? data["depot"] : "julia")
+        old = load(file,depot)
         if (old ≠ nothing)
             cmv = checkmerge(data["revised"],old,data["title"],data["author"],data["date"],data["tex"],"Memory buffer out of sync with vertex, proceed?")
             if cmv == 0
@@ -53,6 +54,8 @@ function texedit(data::Dict,file::String="/tmp/doc.tex")
         catch
             return save(data,file)
         end
+        writedictionary()
+        writemanifest(depot)
     catch err
         throw(err)
     end
