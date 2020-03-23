@@ -8,7 +8,8 @@ export dict2toml, tex2dict, tex2toml, dict2tex, toml2tex, toml2dict
 export zathura, latexmk, pdf, texedit
 
 using Pkg, UUIDs, Dates, REPL, Requires
-using Pkg.TOML, Pkg.Pkg2, REPL.TerminalMenus
+using Pkg.TOML, REPL.TerminalMenus
+VERSION < v"1.4" && (using Pkg.Pkg2)
 
 function drawgraph end
 
@@ -342,7 +343,7 @@ function __init__()
         end
     end
     @require LightGraphs="093fc24a-ae57-5d10-9952-331d41423f4d" begin
-        using LightGraphs
+        import LightGraphs
         function makegraph(manifest=manifest,dictionary=dictionary,index=collect(keys(dictionary)))
             readmanifest()
             readdictionary()
@@ -360,11 +361,11 @@ function __init__()
             return g
         end
     end
-    @require GraphPlot="a2cc645c-3eea-5389-862e-a155d0052231" begin
-        using LightGraphs, GraphPlot, Compose, Cairo
+    #@require GraphPlot="a2cc645c-3eea-5389-862e-a155d0052231"
+    @require Compose="a81c6b42-2e10-5240-aca2-a61377ecd94b" begin
+        import LightGraphs, Cairo, GraphPlot
         function drawgraph(name="/tmp/vtx-data.pdf",manifest=manifest,dictionary=dictionary,index=collect(keys(dictionary)))
-            p = gplot(makegraph(manifest,dictionary,index),nodelabel=index,layout=circular_layout)
-            eval(:(draw(PDF($name, $(Expr(:call,:*,32,:cm)), $(Expr(:call,:*,32,:cm))), $p)))
+            Compose.draw(Compose.PDF(name,32Compose.cm,32Compose.cm),GraphPlot.gplot(makegraph(manifest,dictionary,index),nodelabel=index,layout=GraphPlot.circular_layout))
         end
     end
 end

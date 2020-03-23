@@ -9,7 +9,6 @@ using UUIDs, Pkg
 import REPL
 import REPL: LineEdit, REPLCompletions
 
-import Pkg: Types.casesensitive_isdir
 using Pkg.Types, Pkg.Display, Pkg.Operations
 
 vtxerror(msg::String...) = throw(PkgError(join(msg)))
