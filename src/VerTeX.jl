@@ -113,7 +113,7 @@ function tex2dict(tex::String,data=nothing,disp=false,sav::Array=[])
     occursin(Regex(prereg),pre) && (pre = match(Regex("(?:"*prereg*")\\X+"),pre).match)
     pre = replace(pre,r"\n+$"=>"")
     ## date check
-    docre = rsplit(doc,"%rev:";limit=2)
+    docre = isempty(doc) ? [SubString(doc)] : rsplit(doc,"%rev:";limit=2)
     if (length(docre) == 1)
         docdc = tim
     elseif occursin(r"%vtx:",docre[2])
@@ -362,12 +362,12 @@ function __init__()
         end
     end
     #@require GraphPlot="a2cc645c-3eea-5389-862e-a155d0052231"
-    @require Compose="a81c6b42-2e10-5240-aca2-a61377ecd94b" begin
+    #=@require Compose="a81c6b42-2e10-5240-aca2-a61377ecd94b" begin
         import LightGraphs, Cairo, GraphPlot
         function drawgraph(name="/tmp/vtx-data.pdf",manifest=manifest,dictionary=dictionary,index=collect(keys(dictionary)))
             Compose.draw(Compose.PDF(name,32Compose.cm,32Compose.cm),GraphPlot.gplot(makegraph(manifest,dictionary,index),nodelabel=index,layout=GraphPlot.circular_layout))
         end
-    end
+    end=#
 end
 
 end # module

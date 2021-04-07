@@ -2,6 +2,7 @@
 
 *Typeset scattered graph data rewriter based on LaTeX nodes*
 
+[![DOI](https://zenodo.org/badge/124144717.svg)](https://zenodo.org/badge/latestdoi/124144717)
 [![Build Status](https://travis-ci.org/chakravala/VerTeX.jl.svg?branch=master)](https://travis-ci.org/chakravala/VerTeX.jl)
 [![Build status](https://ci.appveyor.com/api/projects/status/8poc90nqimq5903s/branch/master?svg=true)](https://ci.appveyor.com/project/chakravala/vertex-jl/branch/master)
 [![Coverage Status](https://coveralls.io/repos/chakravala/VerTeX.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/chakravala/VerTeX.jl?branch=master)
@@ -15,6 +16,7 @@ This enables research collaborators to maintain databases of LaTeX nodes. The `V
 This system can also generate graph diagrams depicting the inter-relationships and dependencies of definitions, theorems, calculations, references, and results.
 
 For convenience, the `vtx>` REPL can be used by pressing the `,` key with commands such as `help,vim,pdf,status,dictionary,ranger,preview,search,cd,cdpkg`.
+The REPL code was adapted and modifed from the REPL code of [Pkg.jl](https://github.com/JuliaLang/Pkg.jl) using their [MIT](https://julialang.org/license) Julia license.
 
 #### Requirements
 

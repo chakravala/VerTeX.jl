@@ -2,6 +2,8 @@
 #   This file is part of VerTeX.jl. It is licensed under the MIT license
 #   Copyright (C) 2019 Michael Reed
 
+# This file is adapted from Julia. License is MIT: https://julialang.org/license
+
 command_declarations = [
 "package" => CommandDeclaration[
 [   :kind => CMD_VIM,

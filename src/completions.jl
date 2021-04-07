@@ -1,3 +1,6 @@
+
+# This file is adapted from Julia. License is MIT: https://julialang.org/license
+
 function complete_local_path(s, i1, i2)
     cmp = REPL.REPLCompletions.complete_path(s, i2)
     completions = filter!(isdir, [REPL.REPLCompletions.completion_text(p) for p in cmp[1]])

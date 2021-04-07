@@ -3,13 +3,15 @@ module REPLMode
 #   This file is part of VerTeX.jl. It is licensed under the MIT license
 #   Copyright (C) 2019 Michael Reed
 
+# This file is adapted from Julia. License is MIT: https://julialang.org/license
+
 using Markdown
 using UUIDs, Pkg
 
 import REPL
 import REPL: LineEdit, REPLCompletions
 
-using Pkg.Types, Pkg.Display, Pkg.Operations
+using Pkg.Types, Pkg.Operations #, Pkg.Display
 
 vtxerror(msg::String...) = throw(PkgError(join(msg)))
 
